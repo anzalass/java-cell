@@ -1,0 +1,277 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+    id String @id @default(uuid())
+    nama String
+    email String @unique
+    password String
+    role String
+    penempatan String?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+    UangModal UangModal[]
+    KejadianTakTerduga KejadianTakTerduga[]
+    JualanHarian JualanHarian[]
+    TransaksiAksesoris TransaksiAksesoris[]
+    TransaksiSparepart TransaksiSparepat[]
+    ServiceHP ServiceHP[]
+    TransaksiVoucher TransaksiVoucherDownline[]
+}
+
+model Member {
+    id String @id @default(uuid())
+    nama String
+    noTelp String @unique
+    totalTransaksi Int
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+    JualanHarian JualanHarian[]
+    TransaksiAksesoris TransaksiAksesoris[]
+    TransaksiSparepart TransaksiSparepat[]
+    ServiceHP ServiceHP[]
+}
+
+model Downline {
+  id String @id @default(uuid())
+  nama String
+  kodeDownline String @unique
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+  transaksiVoucherDownline TransaksiVoucherDownline[]
+}
+
+model Voucher {
+  id String @id @default(uuid())
+  nama String
+  brand String
+  stok Int
+  hargaPokok Int?
+  hargaJual Int?
+  penempatan String
+  ItemsTransaksiVoucherDownline ItemsTransaksiVoucherDownline[]
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+
+}
+
+model Aksesoris {
+  id String @id @default(uuid())
+  barcode String @unique
+  nama String
+  kategori String
+  brand String
+  stok Int
+  hargaModal Int
+  penempatan String
+  hargaJual Int
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+  ItemsTransaksiAksesoris ItemsTransaksiAksesoris[]
+}
+
+model SparePart {
+  id String @id @default(uuid())
+  barcode String @unique
+  nama String
+  kategori String
+  brand String
+  stok Int
+  hargaModal Int
+  hargaJual Int
+  penempatan String
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+  ItemsTransaksiSparepart ItemsTransaksiSparepart[]
+  SparepartService SparepartServiceHP[]
+}
+
+model TransaksiSparepat {
+  id String @id @default(uuid())
+  namaPembeli String?
+  totalHarga Int
+  tanggal DateTime
+  keuntungan Int
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+  penempatan String
+  items ItemsTransaksiSparepart[]
+  idUser String
+  User          User @relation(fields: [idUser], references: [id])
+  idMember String?
+  Member          Member? @relation(fields: [idMember], references: [id])
+}
+
+model ItemsTransaksiSparepart {
+  id String @id @default(uuid())
+  idTransaksi String
+  idSparepart String
+  tanggal DateTime?
+  quantity Int
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+  TransaksiSparepart TransaksiSparepat @relation(fields: [idTransaksi], references: [id])
+  Sparepart SparePart @relation(fields: [idSparepart], references: [id])
+}
+
+
+
+model TransaksiVoucherDownline {
+  id String @id @default(uuid())
+  kodeDownline String
+  totalHarga Int
+  tanggal DateTime
+  keuntungan Int?
+  status String
+  createdAt DateTime? @default(now())
+  penempatan String
+  updatedAt DateTime? @updatedAt
+  downline Downline @relation(fields: [kodeDownline], references: [kodeDownline])
+  items ItemsTransaksiVoucherDownline[]
+  idUser String?
+  User          User? @relation(fields: [idUser], references: [id])
+
+}
+
+model ItemsTransaksiVoucherDownline {
+  id String @id @default(uuid())
+  idTransaksi String
+  idVoucher String
+  tanggal DateTime?
+  quantity Int
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+  transaksi TransaksiVoucherDownline @relation(fields: [idTransaksi], references: [id])
+  Voucher Voucher @relation(fields: [idVoucher], references: [id])
+
+}
+
+model TransaksiAksesoris {
+  id String @id @default(uuid())
+  namaPembeli String?
+  totalHarga Int
+  tanggal DateTime
+  keuntungan Int?
+  status String
+  penempatan String
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+  items ItemsTransaksiAksesoris[]
+  idUser String
+  User          User @relation(fields: [idUser], references: [id])
+  idMember String?
+  Member          Member? @relation(fields: [idMember], references: [id])
+
+}
+
+model ItemsTransaksiAksesoris {
+  id String @id @default(uuid())
+  idTransaksi String
+  idAksesoris String
+  quantity Int
+  tanggal DateTime?
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+  TransaksiAksesoris TransaksiAksesoris @relation(fields: [idTransaksi], references: [id])
+  Aksesoris Aksesoris @relation(fields: [idAksesoris], references: [id])
+}
+
+model UangModal {
+  id String @id @default(uuid())
+  keterangan String
+  tanggal DateTime
+  jumlah Int
+  penempatan String
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+  idUser String
+  User          User @relation(fields: [idUser], references: [id])
+}
+
+model ServiceHP {
+  id String @id @default(uuid())
+  brandHP String 
+  keterangan String
+  tanggal DateTime
+  namaPelangan String?
+  status String
+  hargaSparePart Int?
+  biayaJasa Int
+  keuntungan Int
+  penempatan String
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+  Sparepart SparepartServiceHP[]
+  idUser String
+  User          User @relation(fields: [idUser], references: [id])
+  idMember String?
+  Member          Member? @relation(fields: [idMember], references: [id])
+
+}
+
+model SparepartServiceHP {
+    id String @id @default(uuid())
+    idServiceHP String
+    idSparepart String
+    quantity Int
+    tanggal DateTime?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+    ServiveHP ServiceHP  @relation(fields: [idServiceHP], references: [id])
+    Sparepart SparePart  @relation(fields: [idSparepart], references: [id])
+}
+
+
+model Log {
+    id String @id @default(uuid())
+    kategori String
+    keterangan String
+    nama String
+    tanggal DateTime
+    nominal Int?
+    createdAt DateTime? @default(now())
+    updatedAt DateTime? @updatedAt
+}
+
+
+model JualanHarian {
+      id String @id @default(uuid())
+      kategori String
+      nominal Int?
+      tanggal DateTime
+      penempatan String
+      createdAt DateTime? @default(now())
+      updatedAt DateTime? @updatedAt
+      idUser String
+      User          User @relation(fields: [idUser], references: [id])
+      idMember String?
+      Member          Member? @relation(fields: [idMember], references: [id])
+
+}
+
+
+model KejadianTakTerduga {
+      id String @id @default(uuid())
+      nominal Int
+      no_transaksi Int
+      keterangan String
+      penempatan String
+      tanggal DateTime
+      createdAt DateTime? @default(now())
+      updatedAt DateTime? @updatedAt
+      idUser String
+      User          User @relation(fields: [idUser], references: [id])
+
+}
