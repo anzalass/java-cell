@@ -21,7 +21,7 @@ app.use(cookieParser()); // ✅ WAJIB!
 app.use(morgan("dev"));
 app.use(
   cors({
-    origin: "http://localhost:5173", // Sesuaikan dengan frontend kamu
+    origin: `${process.env.SERVER_FE}`, // Sesuaikan dengan frontend kamu
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
