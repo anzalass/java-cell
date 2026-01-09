@@ -120,11 +120,10 @@ export const logoutHandler = async (req, res) => {
     //   sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
     // });
 
-    res.cookie("auth_token", result.token, {
+    res.clearCookie("auth_token", {
       httpOnly: true,
-      secure: true, // WAJIB HTTPS
-      sameSite: "none", // 🔥 WAJIB cross-site
-      maxAge: 3 * 24 * 60 * 60 * 1000,
+      secure: true,
+      sameSite: "none", // 🔥 HARUS SAMA
     });
 
     return res.status(200).json({
@@ -132,6 +131,8 @@ export const logoutHandler = async (req, res) => {
       success: true,
     });
   } catch (error) {
+    console.log(error);
+
     return res.status(500).json({
       message: "Gagal logout",
       success: false,
