@@ -43,6 +43,7 @@ import transaksiAksesoris from "./routes/transaksiAksesorisRoutes.js";
 import transaksiVoucher from "./routes/transaksiVoucherRoutes.js";
 import jualanHarian from "./routes/jualanRoutes.js";
 import memberRoutes from "./routes/memberRoutes.js";
+import voucherHarian from "./routes/jualanVoucherRoutes.js";
 
 app.use("/api/v1", authRoutes);
 app.use("/api/v1", aksesorisRoutes);
@@ -58,6 +59,7 @@ app.use("/api/v1", transaksiAksesoris);
 app.use("/api/v1", transaksiSparepart);
 app.use("/api/v1", jualanHarian);
 app.use("/api/v1", memberRoutes);
+app.use("/api/v1", voucherHarian);
 
 app.use(errorHandler);
 

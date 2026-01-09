@@ -24,7 +24,8 @@ const parseSort = (sortField, sortOrder = "asc") => {
 
 // CREATE
 export const createVoucher = async (data, user) => {
-  const { nama, brand, stok, hargaPokok, hargaJual, tanggal } = data;
+  const { nama, brand, stok, hargaPokok, hargaJual, hargaEceran, tanggal } =
+    data;
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -39,6 +40,7 @@ export const createVoucher = async (data, user) => {
           stok: parseInt(stok) || 0,
           hargaPokok: hargaPokok ? parseInt(hargaPokok) : null,
           hargaJual: hargaJual ? parseInt(hargaJual) : null,
+          hargaEceran: hargaEceran ? parseInt(hargaEceran) : null,
           createdAt: new Date(`${tanggal}T00:00:00Z`),
           updatedAt: new Date(`${tanggal}T00:00:00Z`),
         },
@@ -123,6 +125,7 @@ export const getVouchers = async ({
           stok: true,
           hargaPokok: true,
           hargaJual: true,
+          hargaEceran: true,
           createdAt: true,
           penempatan: true,
           updatedAt: true,
@@ -179,7 +182,7 @@ export const getVoucherById = async (id) => {
 // UPDATE
 export const updateVoucher = async (id, data, user) => {
   try {
-    const { nama, brand, stok, hargaPokok, hargaJual } = data;
+    const { nama, brand, stok, hargaPokok, hargaJual, hargaEceran } = data;
 
     await prisma.$transaction(async (tx) => {
       await tx.voucher.update({
@@ -190,6 +193,7 @@ export const updateVoucher = async (id, data, user) => {
           stok: stok ? parseInt(stok) : undefined,
           hargaPokok: hargaPokok ? parseInt(hargaPokok) : undefined,
           hargaJual: hargaJual ? parseInt(hargaJual) : undefined,
+          hargaEceran: hargaEceran ? parseInt(hargaEceran) : null,
         },
       });
     });

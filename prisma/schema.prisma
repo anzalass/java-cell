@@ -60,10 +60,12 @@ model Voucher {
   stok Int
   hargaPokok Int?
   hargaJual Int?
+  hargaEceran Int?
   penempatan String
   ItemsTransaksiVoucherDownline ItemsTransaksiVoucherDownline[]
   createdAt DateTime? @default(now())
   updatedAt DateTime? @updatedAt
+  TransaksiVoucherHarian TransaksiVoucherHarian[]
 
 }
 
@@ -124,6 +126,15 @@ model ItemsTransaksiSparepart {
   updatedAt DateTime? @updatedAt
   TransaksiSparepart TransaksiSparepat @relation(fields: [idTransaksi], references: [id])
   Sparepart SparePart @relation(fields: [idSparepart], references: [id])
+}
+
+model TransaksiVoucherHarian {
+  id String @id @default(uuid())
+  idVoucher String
+  keuntungan Int
+  Voucher Voucher @relation(fields: [idVoucher], references: [id])
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
 }
 
 
