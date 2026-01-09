@@ -114,10 +114,17 @@ export const loginController2 = async (req, res) => {
 export const logoutHandler = async (req, res) => {
   try {
     // Hapus cookie di client
-    res.clearCookie("auth_token", {
+    // res.clearCookie("auth_token", {
+    //   httpOnly: true,
+    //   secure: process.env.NODE_ENV === "production",
+    //   sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+    // });
+
+    res.cookie("auth_token", result.token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
+      secure: true, // WAJIB HTTPS
+      sameSite: "none", // 🔥 WAJIB cross-site
+      maxAge: 3 * 24 * 60 * 60 * 1000,
     });
 
     return res.status(200).json({
