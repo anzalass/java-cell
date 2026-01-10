@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
+import { getJualanVoucherHarian } from "./jualanVoucherService.js";
 const prisma = new PrismaClient();
 
 export const dashboardPageService = async () => {
@@ -369,29 +370,6 @@ export const serviceHPPageService = async () => {
 export const dashboardPageService2 = async (
   user,
   {
-    // === Pagination & Limit: Transaksi ===
-    pageVoucher = 1,
-    limitVoucher = 5,
-
-    pageAccTrx = 1,
-    limitAccTrx = 5,
-
-    pageService = 1,
-    limitService = 5,
-
-    pageSparepartTrx = 1,
-    limitSparepartTrx = 5,
-
-    // === Pagination & Limit: Stok ===
-    pageAccStok = 1,
-    limitAccStok = 5,
-
-    pageSparepartStok = 1,
-    limitSparepartStok = 5,
-
-    pageVdStok = 1,
-    limitVdStok = 5,
-
     // === Search (opsional) ===
     searchAccStok = "",
     searchSparepartStok = "",
@@ -414,22 +392,16 @@ export const dashboardPageService2 = async (
       },
     };
 
-    // === Hitung Skip ===
-    const skipVoucher = (pageVoucher - 1) * limitVoucher;
-    const skipAccTrx = (pageAccTrx - 1) * limitAccTrx;
-    const skipService = (pageService - 1) * limitService;
-    const skipSparepartTrx = (pageSparepartTrx - 1) * limitSparepartTrx;
-    const skipAccStok = (pageAccStok - 1) * limitAccStok;
-    const skipSparepartStok = (pageSparepartStok - 1) * limitSparepartStok;
-    const skipVdStok = (pageVdStok - 1) * limitVdStok;
-
     // === AGREGAT & COUNT (ringan, tidak perlu paginate) ===
     const [
-      totalKeuntunganHariIni,
-      omsetGrosirVoucherHariIni,
-      keuntunganGrosirVoucherHariIni,
-      trxVoucherDownlineHariIniTotal,
-      trxVoucherPendingHariIni,
+      totalKeuntunganHariIni, //o
+      trxHariIniTotal, // o
+
+      omsetGrosirVoucherHariIni, //o
+      keuntunganGrosirVoucherHariIni, //o
+      trxVoucherDownlineHariIniTotal, // o
+      trxVoucherPendingHariIni, //o
+
       omsetAccHariIni,
       keuntunganAccHariIni,
       trxAccHariIniTotal,
@@ -445,6 +417,16 @@ export const dashboardPageService2 = async (
         _sum: { nominal: true },
         where: todayFilter,
       }),
+      prisma.jualanHarian.count({
+        where: {
+          createdAt: {
+            gte: startOfToday,
+            lt: endOfToday,
+          },
+        },
+      }),
+
+      //================
       prisma.transaksiVoucherDownline.aggregate({
         _sum: { totalHarga: true },
         where: {
@@ -465,9 +447,18 @@ export const dashboardPageService2 = async (
           status: "Selesai",
         },
       }),
-      prisma.transaksiVoucherDownline.count({ where: todayFilter }),
       prisma.transaksiVoucherDownline.count({
-        where: { ...todayFilter, status: "Pending" },
+        where: todayFilter,
+      }),
+
+      prisma.transaksiVoucherDownline.count({
+        where: {
+          createdAt: {
+            gte: startOfToday,
+            lt: endOfToday,
+          },
+          status: "Pending",
+        },
       }),
       prisma.transaksiAksesoris.aggregate({
         _sum: { totalHarga: true },
@@ -670,9 +661,15 @@ export const dashboardPageService2 = async (
 
     // === TOTAL COUNT untuk pagination ===
 
+    const voucherHarian = await getJualanVoucherHarian();
+
     return {
       // === AGREGAT ===
       totalKeuntunganHariIni: totalKeuntunganHariIni._sum.nominal || 0,
+      trxHariIniTotal,
+      keuntunganVoucherHarian: voucherHarian.statistik.totalKeuntungan || 0,
+      omsetVoucherHarian: voucherHarian.statistik.totalOmset || 0,
+      totalTransaksiVoucherHarian: voucherHarian.statistik.totalTransaksi || 0,
       omsetGrosirVoucherHariIni: omsetGrosirVoucherHariIni._sum.totalHarga || 0,
       keuntunganGrosirVoucherHariIni:
         keuntunganGrosirVoucherHariIni._sum.keuntungan || 0,

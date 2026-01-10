@@ -103,10 +103,15 @@ export const createKejadianTakTerduga = async ({
     data: {
       keterangan,
       penempatan,
-      idUser,
       nominal: Number(nominal),
       no_transaksi: Number(no_transaksi),
-      tanggal: new Date(), // ✅ DateTime
+      tanggal: new Date(),
+
+      User: {
+        connect: {
+          id: idUser,
+        },
+      },
     },
   });
 };
@@ -129,11 +134,21 @@ export const getLaporanKeuangan = async ({
   filterJenis = "all",
   filterKategori = "all",
 }) => {
-  const skip = (Number(page) - 1) * Number(pageSize);
-  const take = Number(pageSize);
+  const safeNumber = (val, def) => {
+    const n = Number(val);
+    return Number.isFinite(n) && n > 0 ? n : def;
+  };
 
-  const skip2 = (Number(page2) - 1) * Number(pageSize2);
-  const take2 = Number(pageSize2);
+  const pageSafe = safeNumber(page, 1);
+  const pageSizeSafe = safeNumber(pageSize, 10);
+  const page2Safe = safeNumber(page2, 1);
+  const pageSize2Safe = safeNumber(pageSize2, 10);
+
+  const skip = (pageSafe - 1) * pageSizeSafe;
+  const take = pageSizeSafe;
+
+  const skip2 = (page2Safe - 1) * pageSize2Safe;
+  const take2 = pageSize2Safe;
 
   // Tentukan rentang tanggal
   let dateFilter = {};

@@ -61,6 +61,7 @@ export const getVouchers = async ({
   page = 1,
   pageSize = 10,
   search = "",
+  brand = "all",
   sortBy = "createdAt",
   sortOrder = "desc",
   createdAt, // format: "2025-11-22"
@@ -79,6 +80,16 @@ export const getVouchers = async ({
         }
       : {};
 
+    const brandFilter =
+      brand && brand !== "all"
+        ? {
+            brand: {
+              equals: brand,
+              mode: "insensitive",
+            },
+          }
+        : {};
+
     // ✅ Filter pencarian
     const searchFilter = search
       ? {
@@ -92,6 +103,7 @@ export const getVouchers = async ({
     // ✅ Gabungkan semua filter
     const where = {
       ...dateFilter,
+      ...brandFilter,
       ...(search ? searchFilter : {}),
     };
 

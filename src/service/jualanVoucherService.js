@@ -39,14 +39,14 @@ export const deleteTransaksiVoucher = async (idTransaksi) => {
   try {
     const transaksi = await prisma.transaksiVoucherHarian.findUnique({
       where: { id: idTransaksi },
-      include: { voucher: true }, // Ambil data voucher terkait
+      include: { Voucher: true }, // Ambil data voucher terkait
     });
 
     if (!transaksi) {
       throw new Error("Transaksi tidak ditemukan");
     }
 
-    const voucher = transaksi.idVoucher;
+    const voucher = transaksi.Voucher;
     if (!voucher) {
       throw new Error("Voucher terkait tidak ditemukan");
     }
@@ -267,98 +267,140 @@ const getDateRange = (periode, startDate = null, endDate = null) => {
   }
   return { start, end };
 };
-
 export const getLaporanVoucherTerlaris = async ({
-  periode = "semua", // "hari", "minggu", "bulan", "custom", "semua"
+  periode = "semua",
   startDate,
   endDate,
-  search, // nama voucher
+  search,
   brand,
+  page = 1,
+  pageSize = 10,
 }) => {
   try {
-    // Dapatkan rentang tanggal
     const { start: dateStart, end: dateEnd } = getDateRange(
       periode,
       startDate,
       endDate
     );
 
-    // Bangun kondisi where untuk transaksi
-    const whereTransaksi = {
-      createdAt: {
-        gte: dateStart,
-        lte: dateEnd,
-      },
-    };
+    const take = Number(pageSize);
+    const skip = (Number(page) - 1) * take;
 
-    // Bangun kondisi where untuk voucher (relasi)
-    const whereVoucher = {};
-    if (search) {
-      whereVoucher.nama = { contains: search, mode: "insensitive" };
-    }
-    if (brand) {
-      whereVoucher.brand = { contains: brand, mode: "insensitive" };
-    }
-
-    // Aggregate: hitung jumlah terjual per voucher
-    const hasil = await prisma.transaksiVoucherHarian.groupBy({
+    /* ===============================
+       1️⃣ GROUP BY TRANSAKSI
+    =============================== */
+    const grouped = await prisma.transaksiVoucherHarian.groupBy({
       by: ["idVoucher"],
-      where: whereTransaksi,
-      _count: { id: true }, // jumlah transaksi = jumlah terjual
-      _sum: { keuntungan: true },
-      orderBy: { _count: { id: "desc" } }, // urutkan dari terbanyak
-      include: {
-        voucher: {
-          where: whereVoucher,
-          select: {
-            id: true,
-            nama: true,
-            brand: true,
-            hargaJual: true,
-            hargaPokok: true,
-            hargaEceran: true,
-          },
+      where: {
+        createdAt: {
+          gte: dateStart,
+          lte: dateEnd,
         },
+      },
+      _count: { id: true },
+      _sum: { keuntungan: true },
+      orderBy: {
+        _count: { id: "desc" },
       },
     });
 
-    // Filter hasil yang voucher-nya null (karena whereVoucher di include)
-    const filtered = hasil
-      .filter((item) => item.voucher !== null)
-      .map((item) => ({
-        voucher: {
-          id: item.voucher.id,
-          nama: item.voucher.nama,
-          brand: item.voucher.brand,
-          hargaJual: item.voucher.hargaJual,
-          hargaPokok: item.voucher.hargaPokok,
-          hargaEceran: item.voucher.hargaEceran,
-        },
-        jumlahTerjual: item._count.id,
-        totalKeuntungan: item._sum.keuntungan || 0,
-        totalPendapatan: item._count.id * (item.voucher.hargaJual || 0),
-      }));
+    const totalItems = grouped.length;
 
-    // Hitung total keseluruhan
-    const totalTerjual = filtered.reduce(
-      (sum, item) => sum + item.jumlahTerjual,
-      0
-    );
-    const totalPendapatan = filtered.reduce(
-      (sum, item) => sum + item.totalPendapatan,
-      0
-    );
-    const totalKeuntungan = filtered.reduce(
-      (sum, item) => sum + item.totalKeuntungan,
-      0
-    );
+    if (totalItems === 0) {
+      return {
+        data: [],
+        statistik: {
+          totalTerjual: 0,
+          totalPendapatan: 0,
+          totalKeuntungan: 0,
+        },
+        meta: {
+          page,
+          pageSize: take,
+          totalItems: 0,
+          totalPages: 0,
+        },
+      };
+    }
+
+    /* ===============================
+       2️⃣ PAGINATION (SETELAH SORT)
+    =============================== */
+    const pagedGrouped = grouped.slice(skip, skip + take);
+
+    /* ===============================
+       3️⃣ FILTER VOUCHER
+    =============================== */
+    const voucherWhere = {
+      id: {
+        in: pagedGrouped.map((g) => g.idVoucher),
+      },
+      ...(search && {
+        nama: { contains: search, mode: "insensitive" },
+      }),
+      ...(brand && {
+        brand: { contains: brand, mode: "insensitive" },
+      }),
+    };
+
+    const vouchers = await prisma.voucher.findMany({
+      where: voucherWhere,
+      select: {
+        id: true,
+        nama: true,
+        brand: true,
+        hargaJual: true,
+        hargaPokok: true,
+        hargaEceran: true,
+      },
+    });
+
+    const voucherMap = Object.fromEntries(vouchers.map((v) => [v.id, v]));
+
+    /* ===============================
+       4️⃣ GABUNGKAN HASIL
+    =============================== */
+    const data = pagedGrouped
+      .filter((g) => voucherMap[g.idVoucher])
+      .map((g) => {
+        const v = voucherMap[g.idVoucher];
+        const jumlahTerjual = g._count.id;
+        const totalKeuntungan = g._sum.keuntungan ?? 0;
+        const totalPendapatan = jumlahTerjual * (v.hargaEceran ?? 0);
+        const modal = jumlahTerjual * (v.hargaPokok ?? 0);
+
+        return {
+          voucher: v,
+          jumlahTerjual,
+          totalKeuntungan,
+          totalPendapatan,
+          modal,
+        };
+      });
+
+    /* ===============================
+       5️⃣ STATISTIK GLOBAL
+    =============================== */
+    const statistik = {
+      totalTerjual: grouped.reduce((s, i) => s + i._count.id, 0),
+      totalPendapatan: grouped.reduce((s, i) => {
+        const v = voucherMap[i.idVoucher];
+        return s + (v ? i._count.id * (v.hargaEceran ?? 0) : 0);
+      }, 0),
+      totalKeuntungan: grouped.reduce(
+        (s, i) => s + (i._sum.keuntungan ?? 0),
+        0
+      ),
+    };
 
     return {
-      data: filtered,
-      statistik: {
-        totalTerjual,
-        totalPendapatan,
-        totalKeuntungan,
+      data,
+      statistik,
+      meta: {
+        page: Number(page),
+        pageSize: take,
+        totalItems,
+        totalPages: Math.ceil(totalItems / take),
       },
       filter: {
         periode,

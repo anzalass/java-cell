@@ -35,6 +35,8 @@ export const createKejadianTakTerdugaHandler = async (req, res) => {
     const { keterangan, nominal, no_transaksi } = req.body;
     const penempatan = req.user.penempatan;
     const idUser = req.user.id;
+    console.log("dadadad", idUser);
+
     const result = await createKejadianTakTerduga({
       keterangan,
       nominal,

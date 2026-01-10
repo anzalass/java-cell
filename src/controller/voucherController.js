@@ -23,12 +23,14 @@ export const createVoucherHandler = async (req, res) => {
 // GET /api/vouchers
 export const getVouchersHandler = async (req, res) => {
   try {
-    const { page, pageSize, search, sortBy, sortOrder, createdAt } = req.query;
+    const { page, pageSize, search, sortBy, sortOrder, createdAt, brand } =
+      req.query;
     const result = await getVouchers({
       page,
       pageSize,
       search,
       sortBy,
+      brand,
       sortOrder,
       createdAt,
     });
