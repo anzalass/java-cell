@@ -7,6 +7,7 @@ import {
   deletePendingTransaksiHandler,
   getLaporanBarangKeluarHandler,
   createGrosirOrderHandler2,
+  detailTransaksiVoucherDownline,
 } from "../controller/transaksiVoucherController.js";
 import { AuthMiddleware } from "../utils/authMiddleware.js";
 
@@ -15,6 +16,7 @@ const router = Router();
 // POST   /api/transaksi/grosir          → Buat pesanan
 router.post("/grosir", AuthMiddleware, createGrosirOrderHandler);
 router.post("/grosir-downline", createGrosirOrderHandler2);
+router.get("/grosir-vd-print/:id", detailTransaksiVoucherDownline);
 
 // GET    /api/transaksi/grosir          → List semua transaksi
 router.get("/grosir", AuthMiddleware, getAllTransaksiGrosirHandler);

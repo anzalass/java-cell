@@ -445,3 +445,24 @@ export const getLaporanBarangKeluar = async ({
     },
   };
 };
+
+export const getDetailTransaksiVoucherDownline = async (id) => {
+  const transaksi = await prisma.transaksiVoucherDownline.findUnique({
+    where: { id },
+    include: {
+      downline: true,
+      User: true,
+      items: {
+        include: {
+          Voucher: true,
+        },
+      },
+    },
+  });
+
+  if (!transaksi) {
+    throw new Error("Transaksi tidak ditemukan");
+  }
+
+  return transaksi;
+};
