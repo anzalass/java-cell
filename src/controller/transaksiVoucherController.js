@@ -3,6 +3,7 @@ import {
   createGrosirOrder,
   deletePendingTransaksi,
   getAllTransaksiGrosir,
+  getDetailTransaksiVoucherDownline,
   getLaporanBarangKeluar,
   updateTransaksiStatus,
 } from "../service/transaksiVoucherService.js"; // Sesuaikan path
@@ -77,6 +78,24 @@ export const getAllTransaksiGrosirHandler = async (req, res) => {
   } catch (error) {
     console.error("Get all transaksi error:", error);
     res.status(400).json({ error: error.message });
+  }
+};
+
+export const detailTransaksiVoucherDownline = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const data = await getDetailTransaksiVoucherDownline(id);
+
+    res.status(200).json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    res.status(404).json({
+      success: false,
+      message: error.message,
+    });
   }
 };
 
