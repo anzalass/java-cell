@@ -150,8 +150,8 @@ export const getAllTransaksiAksesoris = async ({
   const [data, total] = await prisma.$transaction([
     prisma.transaksiAksesoris.findMany({
       where,
-      skip,
-      take,
+      // skip,
+      // take,
       orderBy: { tanggal: "desc" },
       include: {
         items: {
@@ -379,7 +379,7 @@ export const getLaporanBarangKeluar = async ({
   const totalCount = resultArray.length;
 
   // Terapkan pagination
-  const paginatedData = resultArray.slice(skip, skip + take);
+  const paginatedData = resultArray;
 
   return {
     paginatedData,

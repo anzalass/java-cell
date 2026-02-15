@@ -24,8 +24,16 @@ const parseSort = (sortField, sortOrder = "asc") => {
 
 // CREATE
 export const createVoucher = async (data, user) => {
-  const { nama, brand, stok, hargaPokok, hargaJual, hargaEceran, tanggal } =
-    data;
+  const {
+    nama,
+    brand,
+    stok,
+    hargaPokok,
+    hargaJual,
+    hargaEceran,
+    tanggal,
+    penempatan,
+  } = data;
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -35,7 +43,7 @@ export const createVoucher = async (data, user) => {
         data: {
           // 👈 tambahkan "data:"
           nama,
-          penempatan: user.penempatan,
+          penempatan,
           brand,
           stok: parseInt(stok) || 0,
           hargaPokok: hargaPokok ? parseInt(hargaPokok) : null,
@@ -64,21 +72,46 @@ export const getVouchers = async ({
   brand = "all",
   sortBy = "createdAt",
   sortOrder = "desc",
-  createdAt, // format: "2025-11-22"
+  penempatan = "",
+  createdStart,
+  createdEnd,
+  updatedStart,
+  updatedEnd,
 }) => {
   try {
     const skip = (parseInt(page) - 1) * parseInt(pageSize);
     const take = parseInt(pageSize);
 
     // ✅ Filter tanggal
-    const dateFilter = createdAt
-      ? {
-          createdAt: {
-            gte: new Date(`${createdAt}T00:00:00`),
-            lt: new Date(`${createdAt}T23:59:59.999`),
-          },
-        }
-      : {};
+    // ✅ Filter CREATED RANGE
+    const createdFilter =
+      createdStart || createdEnd
+        ? {
+            createdAt: {
+              ...(createdStart && {
+                gte: new Date(new Date(createdStart).setHours(0, 0, 0, 0)),
+              }),
+              ...(createdEnd && {
+                lte: new Date(new Date(createdEnd).setHours(23, 59, 59, 999)),
+              }),
+            },
+          }
+        : {};
+
+    // ✅ Filter UPDATED RANGE
+    const updatedFilter =
+      updatedStart || updatedEnd
+        ? {
+            updatedAt: {
+              ...(updatedStart && {
+                gte: new Date(new Date(updatedStart).setHours(0, 0, 0, 0)),
+              }),
+              ...(updatedEnd && {
+                lte: new Date(new Date(updatedEnd).setHours(23, 59, 59, 999)),
+              }),
+            },
+          }
+        : {};
 
     const brandFilter =
       brand && brand !== "all"
@@ -90,6 +123,15 @@ export const getVouchers = async ({
           }
         : {};
 
+    const penempatanFilter = penempatan
+      ? {
+          penempatan: {
+            contains: penempatan,
+            mode: "insensitive",
+          },
+        }
+      : {};
+
     // ✅ Filter pencarian
     const searchFilter = search
       ? {
@@ -100,10 +142,11 @@ export const getVouchers = async ({
         }
       : {};
 
-    // ✅ Gabungkan semua filter
     const where = {
-      ...dateFilter,
+      ...createdFilter,
+      ...updatedFilter,
       ...brandFilter,
+      ...penempatanFilter,
       ...(search ? searchFilter : {}),
     };
 
@@ -114,6 +157,8 @@ export const getVouchers = async ({
       "stok",
       "hargaPokok",
       "hargaJual",
+      "hargaEceran",
+      "penempatan",
       "createdAt",
       "updatedAt",
     ];

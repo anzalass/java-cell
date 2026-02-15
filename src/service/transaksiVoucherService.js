@@ -1,6 +1,5 @@
 import { PrismaClient } from "@prisma/client";
 import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
-import { createLog } from "../utils/Log.js";
 const prisma = new PrismaClient();
 
 // src/services/grosir.service.js
@@ -209,8 +208,8 @@ export const getAllTransaksiGrosir = async ({
   const [data, total] = await prisma.$transaction([
     prisma.transaksiVoucherDownline.findMany({
       where,
-      skip,
-      take,
+      // skip,
+      // take,
       orderBy: { tanggal: "desc" },
       include: {
         items: {
@@ -337,6 +336,7 @@ export const getLaporanBarangKeluar = async ({
   startDate,
   endDate,
   searchNama = "",
+  brand = "", // ✅ TAMBAH BRAND
   sortQty = "none",
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
@@ -345,19 +345,27 @@ export const getLaporanBarangKeluar = async ({
   // Tentukan rentang tanggal
   const { start, end } = getDateRange(filterPeriod, startDate, endDate);
 
-  // Ambil SEMUA data yang sesuai filter (tanpa pagination dulu)
+  // =========================
+  // WHERE CONDITION
+  // =========================
   const whereItems = {
     tanggal: {
       gte: start,
       lte: end,
     },
-    ...(searchNama && {
-      Voucher: {
+    Voucher: {
+      ...(searchNama && {
         nama: { contains: searchNama, mode: "insensitive" },
-      },
-    }),
+      }),
+      ...(brand && {
+        brand: brand, // ✅ FILTER BRAND
+      }),
+    },
   };
 
+  // =========================
+  // FETCH DATA
+  // =========================
   const allItems = await prisma.itemsTransaksiVoucherDownline.findMany({
     where: whereItems,
     orderBy: { tanggal: "desc" },
@@ -376,27 +384,28 @@ export const getLaporanBarangKeluar = async ({
     },
   });
 
-  // ✅ GROUP BY nama barang & hitung total qty
+  // =========================
+  // GROUP BY NAMA BARANG
+  // =========================
   const groupedItems = allItems.reduce((acc, item) => {
-    const key = item.Voucher.nama; // group by nama
+    const key = item.Voucher.nama;
 
     if (!acc[key]) {
       acc[key] = {
         id: key,
         namaBarang: item.Voucher.nama,
         merk: item.Voucher.brand,
-        hargaModal: item.Voucher.hargaPokok,
-        hargaJual: item.Voucher.hargaJual,
+        hargaModal: 0,
+        hargaJual: 0,
         qty: 0,
         tanggalTerakhir: item.tanggal || item.transaksi?.tanggal,
       };
     }
 
     acc[key].qty += item.quantity;
-    acc[key].hargaModal = item.quantity * item.Voucher.hargaPokok;
-    acc[key].hargaJual = item.quantity * item.Voucher.hargaJual;
+    acc[key].hargaModal += item.quantity * item.Voucher.hargaPokok;
+    acc[key].hargaJual += item.quantity * item.Voucher.hargaJual;
 
-    // Update tanggal terakhir jika lebih baru
     const itemDate = item.tanggal || item.transaksi?.tanggal;
     if (itemDate > acc[key].tanggalTerakhir) {
       acc[key].tanggalTerakhir = itemDate;
@@ -405,31 +414,25 @@ export const getLaporanBarangKeluar = async ({
     return acc;
   }, {});
 
-  // Konversi ke array dan urutkan berdasarkan tanggal terakhir
-  let resultArray = Object.values(groupedItems).sort(
-    (a, b) => new Date(b.tanggalTerakhir) - new Date(a.tanggalTerakhir)
-  );
+  let resultArray = Object.values(groupedItems);
 
-  resultArray = Object.values(groupedItems);
-
-  // ✅ SORT BERDASARKAN QUANTITY
+  // =========================
+  // SORTING
+  // =========================
   if (sortQty === "desc") {
-    // Terbanyak dulu
     resultArray.sort((a, b) => b.qty - a.qty);
   } else if (sortQty === "asc") {
-    // Terdikit dulu
     resultArray.sort((a, b) => a.qty - b.qty);
   } else {
-    // Default: urutkan berdasarkan tanggal terakhir
     resultArray.sort(
       (a, b) => new Date(b.tanggalTerakhir) - new Date(a.tanggalTerakhir)
     );
   }
 
-  // Total items setelah grouping
+  // =========================
+  // PAGINATION
+  // =========================
   const totalCount = resultArray.length;
-
-  // Terapkan pagination
   const paginatedData = resultArray.slice(skip, skip + take);
 
   return {

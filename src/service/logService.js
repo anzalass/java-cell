@@ -4,11 +4,9 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 // ✅ CREATE Log
-export const createLog = async (data) => {
-  const { keterangan, nama, tanggal, nominal } = data;
-
+export const createLog = async ({ keterangan, nama, nominal, kategori }) => {
   // Validasi field wajib
-  if (!keterangan || !nama || !tanggal) {
+  if (!keterangan || !nama || !kategori) {
     throw new Error("Field keterangan, nama, dan tanggal wajib diisi");
   }
 
@@ -16,7 +14,7 @@ export const createLog = async (data) => {
     data: {
       keterangan,
       nama,
-      tanggal: new Date(tanggal), // Konversi ke DateTime
+      kategori,
       nominal: nominal ? Number(nominal) : null, // Opsional
     },
   });

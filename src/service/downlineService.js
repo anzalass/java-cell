@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
-import { createLog } from "../utils/Log.js";
+import { createLog } from "./logService.js";
 const prisma = new PrismaClient();
 
 // CREATE
@@ -50,6 +50,7 @@ export const getAllDownlines = async ({
       select: {
         id: true,
         kodeDownline: true,
+        noHp: true,
         nama: true,
         createdAt: true,
       },
@@ -69,18 +70,27 @@ export const getAllDownlines = async ({
 };
 
 // CREATE
-export const createDownline = async (data) => {
-  const { kodeDownline, nama } = data;
-  if (!kodeDownline || !nama) {
+export const createDownline = async (data, user) => {
+  const { kodeDownline, nama, noHp } = data;
+  console.log(noHp);
+
+  if (!kodeDownline || !nama || !noHp) {
     throw new Error("Kode downline dan nama wajib diisi");
   }
 
-  return await prisma.downline.create({
+  const downline = await prisma.downline.create({
     data: {
       kodeDownline,
+      noHp,
       nama,
       createdAt: new Date(),
     },
+  });
+
+  await createLog({
+    kategori: "Downline",
+    keterangan: `Menambah downline baru ${downline.nama}  `,
+    nama: user.nama,
   });
 };
 
@@ -92,21 +102,50 @@ export const getDownlineById = async (id) => {
 };
 
 // UPDATE
-export const updateDownline = async (id, data) => {
+export const updateDownline = async (id, data, user) => {
   const { kodeDownline, nama } = data;
-  return await prisma.downline.update({
+  const oldDownline = await prisma.downline.findUnique({
+    where: {
+      id,
+    },
+  });
+
+  if (!oldDownline) {
+    throw new Error("Downline tidak ditemukan");
+  }
+  const downline = await prisma.downline.update({
     where: { id },
     data: {
       ...(kodeDownline && { kodeDownline }),
       ...(nama && { nama }),
     },
   });
+  await createLog({
+    kategori: "Downline",
+    keterangan: `Mengubah downline ${oldDownline.nama} - ${downline.nama}  `,
+    nama: user.nama,
+  });
 };
 
 // DELETE
-export const deleteDownline = async (id) => {
+export const deleteDownline = async (id, user) => {
+  const oldDownline = await prisma.downline.findUnique({
+    where: {
+      id,
+    },
+  });
+
+  if (!oldDownline) {
+    throw new Error("Downline tidak ditemukan");
+  }
   // Opsional: cek relasi transaksiVoucherDownline jika perlu
-  return await prisma.downline.delete({ where: { id } });
+  await prisma.downline.delete({ where: { id } });
+
+  await createLog({
+    kategori: "Downline",
+    keterangan: `Menghapus downline ${oldDownline.nama} `,
+    nama: user.nama,
+  });
 };
 
 export const masterDownlines = async () => {

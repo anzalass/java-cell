@@ -121,6 +121,7 @@ export const getLaporanBarangKeluarHandler = async (req, res) => {
       endDate,
       searchNama,
       sortQty,
+      brand,
     } = req.query;
 
     const result = await getLaporanBarangKeluar({
@@ -131,6 +132,7 @@ export const getLaporanBarangKeluarHandler = async (req, res) => {
       endDate,
       searchNama,
       sortQty,
+      brand,
     });
 
     res.json(result);

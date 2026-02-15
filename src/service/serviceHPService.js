@@ -17,12 +17,13 @@ export const createServiceHP = async (data) => {
     sparePart,
     idMember,
     idUser,
+    noHP,
     penempatan,
     namaPelanggan,
   } = data;
 
   // Validasi wajib
-  if (!brandHP || !keterangan || !status || biayaJasa == null) {
+  if (!brandHP || !keterangan || !status || biayaJasa == null || !noHP) {
     throw new Error("Field wajib tidak lengkap");
   }
 
@@ -83,15 +84,18 @@ export const createServiceHP = async (data) => {
         quantity,
       });
     }
+    let memberId;
 
-    const memberId = await tx.member.findUnique({
-      where: {
-        id: idMember,
-      },
-      select: {
-        id: true,
-      },
-    });
+    if (idMember) {
+      memberId = await tx.member.findUnique({
+        where: {
+          id: idMember,
+        },
+        select: {
+          id: true,
+        },
+      });
+    }
 
     // Hitung total keuntungan (jasa + sparepart)
     const totalKeuntungan = totalKeuntunganSparepart + Number(biayaJasa);
@@ -102,6 +106,7 @@ export const createServiceHP = async (data) => {
         brandHP,
         keterangan,
         tanggal: new Date(),
+        noHP,
         penempatan,
         idMember,
         idUser,

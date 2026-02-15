@@ -48,6 +48,7 @@ model Downline {
   id String @id @default(uuid())
   nama String
   kodeDownline String @unique
+  noHp String?
   createdAt DateTime? @default(now())
   updatedAt DateTime? @updatedAt
   transaksiVoucherDownline TransaksiVoucherDownline[]
@@ -219,6 +220,7 @@ model ServiceHP {
   namaPelangan String?
   status String
   hargaSparePart Int?
+  noHP String
   biayaJasa Int
   keuntungan Int
   penempatan String
@@ -250,7 +252,6 @@ model Log {
     kategori String
     keterangan String
     nama String
-    tanggal DateTime
     nominal Int?
     createdAt DateTime? @default(now())
     updatedAt DateTime? @updatedAt
