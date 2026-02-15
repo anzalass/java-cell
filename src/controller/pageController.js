@@ -1,4 +1,7 @@
 import {
+  cariAksesoris,
+  cariSparepart,
+  cariVoucher,
   dashboardPageService,
   dashboardPageService2,
   grosirVoucherPageService,
@@ -167,6 +170,74 @@ export const getDashboardData = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Gagal memuat data dashboard",
+    });
+  }
+};
+
+export const cariSparepartController = async (req, res) => {
+  try {
+    const { q = "" } = req.query;
+
+    const data = await cariSparepart(q);
+
+    return res.status(200).json({
+      success: true,
+      message: "Berhasil mencari sparepart",
+      data,
+    });
+  } catch (error) {
+    console.error("cariSparepartController:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Gagal mencari sparepart",
+    });
+  }
+};
+
+/**
+ * 🔍 Cari Voucher
+ * GET /api/v1/search/voucher?q=xl
+ */
+export const cariVoucherController = async (req, res) => {
+  try {
+    const { q = "" } = req.query;
+
+    const data = await cariVoucher(q);
+
+    return res.status(200).json({
+      success: true,
+      message: "Berhasil mencari voucher",
+      data,
+    });
+  } catch (error) {
+    console.error("cariVoucherController:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Gagal mencari voucher",
+    });
+  }
+};
+
+/**
+ * 🔍 Cari Aksesoris
+ * GET /api/v1/search/aksesoris?q=charger
+ */
+export const cariAksesorisController = async (req, res) => {
+  try {
+    const { q = "" } = req.query;
+
+    const data = await cariAksesoris(q);
+
+    return res.status(200).json({
+      success: true,
+      message: "Berhasil mencari aksesoris",
+      data,
+    });
+  } catch (error) {
+    console.error("cariAksesorisController:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Gagal mencari aksesoris",
     });
   }
 };

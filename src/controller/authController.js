@@ -92,7 +92,7 @@ export const loginController2 = async (req, res) => {
       httpOnly: true,
       secure: true, // WAJIB karena HTTPS
       sameSite: "none", // ✅ WAJIB cross-site
-      maxAge: 3 * 24 * 60 * 60 * 1000,
+      maxAge: 5 * 24 * 60 * 60 * 1000,
     });
 
     return res.status(200).json({

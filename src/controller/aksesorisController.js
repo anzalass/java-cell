@@ -42,7 +42,7 @@ export const getAccHandler = async (req, res) => {
 // PUT /api/spareparts/:id
 export const updateAccHandler = async (req, res) => {
   try {
-    const sparePart = await updateAcc(req.params.id, req.body);
+    const sparePart = await updateAcc(req.params.id, req.body, req.user);
     res.json(sparePart);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -52,7 +52,7 @@ export const updateAccHandler = async (req, res) => {
 // DELETE /api/spareparts/:id
 export const deleteAccHandler = async (req, res) => {
   try {
-    await deleteAcc(req.params.id);
+    await deleteAcc(req.params.id, req.user);
     res.status(204).end(); // No Content
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -80,10 +80,14 @@ export const updateStokAccHandler = async (req, res) => {
       return res.status(400).json({ error: "Stok harus berupa angka" });
     }
 
-    const updated = await updateAccStok(id, {
-      tipe,
-      stok: stokNum,
-    });
+    const updated = await updateAccStok(
+      id,
+      {
+        tipe,
+        stok: stokNum,
+      },
+      req.user
+    );
 
     res.json(updated);
   } catch (error) {

@@ -1,19 +1,18 @@
 import { PrismaClient } from "@prisma/client";
-import { createLog } from "../utils/Log.js";
+import { createLog } from "./logService.js";
 const prisma = new PrismaClient();
 
-// src/services/Acc.service.js
-
-// -------------------------
-// GET ALL with filter & pagination
-// -------------------------
 export const getAllAcc = async ({
   page = 1,
   pageSize = 10,
   search = "",
+  penempatan = "",
+  brand = "",
   filterBarcode = "all", // "all", "with", "without"
-  createdAt,
-  updatedAt, // frontend kirim "updatedAt", kita map ke "updateAt"
+  createdStart,
+  createdEnd,
+  updatedStart,
+  updatedEnd, // frontend kirim "updatedAt", kita map ke "updateAt"
   sortBy = "createdAt",
   sortOrder = "desc",
 }) => {
@@ -32,6 +31,20 @@ export const getAllAcc = async ({
       ];
     }
 
+    if (brand) {
+      where.brand = {
+        contains: brand,
+        mode: "insensitive",
+      };
+    }
+
+    if (penempatan) {
+      where.brand = {
+        contains: penempatan,
+        mode: "insensitive",
+      };
+    }
+
     // Filter barcode
     if (filterBarcode === "with") {
       where.barcode = { not: "" };
@@ -40,25 +53,50 @@ export const getAllAcc = async ({
     }
 
     // Filter createdAt (exact date)
-    if (createdAt) {
-      const date = new Date(createdAt);
-      if (isNaN(date.getTime()))
-        throw new Error("Format createdAt tidak valid");
-      where.createdAt = {
-        gte: new Date(date.setUTCHours(0, 0, 0, 0)),
-        lte: new Date(date.setUTCHours(23, 59, 59, 999)),
-      };
+    // CREATED RANGE
+    if (createdStart || createdEnd) {
+      where.createdAt = {};
+
+      if (createdStart) {
+        const start = new Date(createdStart);
+        if (isNaN(start.getTime()))
+          throw new Error("Format createdStart tidak valid");
+
+        start.setHours(0, 0, 0, 0);
+        where.createdAt.gte = start;
+      }
+
+      if (createdEnd) {
+        const end = new Date(createdEnd);
+        if (isNaN(end.getTime()))
+          throw new Error("Format createdEnd tidak valid");
+
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
     }
 
-    // Filter updatedAt → updateAt
-    if (updatedAt) {
-      const date = new Date(updatedAt);
-      if (isNaN(date.getTime()))
-        throw new Error("Format updatedAt tidak valid");
-      where.updateAt = {
-        gte: new Date(date.setUTCHours(0, 0, 0, 0)),
-        lte: new Date(date.setUTCHours(23, 59, 59, 999)),
-      };
+    // UPDATED RANGE
+    if (updatedStart || updatedEnd) {
+      where.updatedAt = {};
+
+      if (updatedStart) {
+        const start = new Date(updatedStart);
+        if (isNaN(start.getTime()))
+          throw new Error("Format updatedStart tidak valid");
+
+        start.setHours(0, 0, 0, 0);
+        where.updatedAt.gte = start;
+      }
+
+      if (updatedEnd) {
+        const end = new Date(updatedEnd);
+        if (isNaN(end.getTime()))
+          throw new Error("Format updatedEnd tidak valid");
+
+        end.setHours(23, 59, 59, 999);
+        where.updatedAt.lte = end;
+      }
     }
 
     // Validasi sort field
@@ -66,11 +104,12 @@ export const getAllAcc = async ({
       "barcode",
       "nama",
       "brand",
+      "penempatan",
       "stok",
       "hargaModal",
       "hargaJual",
       "createdAt",
-      "updateAt",
+      "updatedAt",
     ];
     const sortField = allowedSort.includes(sortBy) ? sortBy : "createdAt";
     const sortDir = sortOrder === "asc" ? "asc" : "desc";
@@ -116,11 +155,19 @@ export const getAllAcc = async ({
 // CREATE
 // -------------------------
 export const createAcc = async (data, user) => {
-  const { barcode, nama, kategori, brand, stok, hargaModal, hargaJual } = data;
+  const {
+    barcode,
+    nama,
+    kategori,
+    brand,
+    stok,
+    hargaModal,
+    hargaJual,
+    penempatan,
+  } = data;
 
   // Validasi wajib
   if (
-    !barcode ||
     !nama ||
     !brand ||
     stok == null ||
@@ -135,7 +182,7 @@ export const createAcc = async (data, user) => {
       barcode,
       nama,
       kategori,
-      penempatan: user.penempatan,
+      penempatan,
       brand,
       stok: Number(stok),
       hargaModal: Number(hargaModal),
@@ -164,10 +211,10 @@ export const getAccById = async (id) => {
 // -------------------------
 // UPDATE
 // -------------------------
-export const updateAcc = async (id, data) => {
+export const updateAcc = async (id, data, user) => {
   const { barcode, nama, kategori, brand, stok, hargaModal, hargaJual } = data;
 
-  return await prisma.aksesoris.update({
+  const acc = await prisma.aksesoris.update({
     where: { id },
     data: {
       ...(barcode !== undefined && { barcode }),
@@ -180,18 +227,36 @@ export const updateAcc = async (id, data) => {
       updatedAt: new Date(),
     },
   });
+
+  await createLog({
+    kategori: "Aksesoris",
+    keterangan: `Mengupdate Aksesoris ${nama} menjadi ${acc.nama}  `,
+    nama: user.nama,
+  });
 };
 
 // -------------------------
 // DELETE
 // -------------------------
-export const deleteAcc = async (id) => {
-  return await prisma.aksesoris.delete({
+export const deleteAcc = async (id, user) => {
+  const acc = await prisma.aksesoris.findUnique({
     where: { id },
+  });
+
+  if (!acc) {
+    throw new Error("Aksesoris tidak ditemukan");
+  }
+  await prisma.aksesoris.delete({
+    where: { id },
+  });
+  await createLog({
+    kategori: "Aksesoris",
+    keterangan: `Menghapus Aksesoris ${acc.nama}  `,
+    nama: user.nama,
   });
 };
 
-export const updateAccStok = async (id, { tipe, stok }) => {
+export const updateAccStok = async (id, { tipe, stok }, user) => {
   // Validasi
   if (!["tambah", "kurang"].includes(tipe)) {
     console.log(tipe);
@@ -227,6 +292,12 @@ export const updateAccStok = async (id, { tipe, stok }) => {
         stok: newStok,
         updatedAt: new Date(), // ⚠️ sesuai model: updateAt
       },
+    });
+
+    await createLog({
+      kategori: "Aksesoris",
+      keterangan: ` Stok Aksesoris ${updated.nama} telah di ${tipe} ${stok} pcs `,
+      nama: user.nama,
     });
 
     return updated;

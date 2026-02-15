@@ -18,13 +18,15 @@ export const createJualanHarianHandler = async (req, res) => {
     const result = await createJualanHarian({
       kategori,
       nominal,
-      tanggal,
       penempatan,
       idMember,
+      tanggal,
       idUser,
+      user: req.user,
     });
     res.status(201).json(result);
   } catch (error) {
+    console.log(error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -44,6 +46,7 @@ export const createKejadianTakTerdugaHandler = async (req, res) => {
       tanggal: new Date().toISOString(), // ambil tanggal sekarang
       penempatan,
       idUser,
+      user: req.user,
     });
     res.status(201).json(result);
   } catch (error) {
@@ -55,7 +58,7 @@ export const createKejadianTakTerdugaHandler = async (req, res) => {
 export const deleteJualanHarianHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    await deleteJualanHarian(id);
+    await deleteJualanHarian(id, req.user);
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -66,7 +69,7 @@ export const deleteJualanHarianHandler = async (req, res) => {
 export const deleteKejadianTakTerdugaHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    await deleteKejadianTakTerduga(id);
+    await deleteKejadianTakTerduga(id, req.user);
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: error.message });

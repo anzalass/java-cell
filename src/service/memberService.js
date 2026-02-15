@@ -1,5 +1,4 @@
 import { PrismaClient } from "@prisma/client";
-import { createLog } from "../utils/Log.js";
 const prisma = new PrismaClient();
 // ─── 1. GET ALL MEMBERS (tanpa filter) ───────────────────────────────
 export const getAllMembers = async () => {

@@ -19,7 +19,7 @@ export const getAllDownlinesHandler = async (req, res) => {
 
 export const createDownlineHandler = async (req, res) => {
   try {
-    const downline = await createDownline(req.body);
+    const downline = await createDownline(req.body, req.user);
     res.status(201).json(downline);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -28,7 +28,7 @@ export const createDownlineHandler = async (req, res) => {
 
 export const getDownlineHandler = async (req, res) => {
   try {
-    const downline = await getDownlineById(req.params.id);
+    const downline = await getDownlineById(req.params.id, req.user);
     res.json(downline);
   } catch (error) {
     res.status(404).json({ error: error.message });
@@ -37,7 +37,7 @@ export const getDownlineHandler = async (req, res) => {
 
 export const updateDownlineHandler = async (req, res) => {
   try {
-    const downline = await updateDownline(req.params.id, req.body);
+    const downline = await updateDownline(req.params.id, req.body, req.user);
     res.json(downline);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -46,7 +46,7 @@ export const updateDownlineHandler = async (req, res) => {
 
 export const deleteDownlineHandler = async (req, res) => {
   try {
-    await deleteDownline(req.params.id);
+    await deleteDownline(req.params.id, req.user);
     res.status(204).end();
   } catch (error) {
     res.status(400).json({ error: error.message });

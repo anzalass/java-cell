@@ -10,9 +10,13 @@ export const getAllSpareParts = async ({
   page = 1,
   pageSize = 10,
   search = "",
-  filterBarcode = "all", // "all", "with", "without"
-  createdAt,
-  updatedAt, // frontend kirim "updatedAt", kita map ke "updatedAt"
+  brand = "",
+  penempatan = "",
+  createdStart,
+  createdEnd,
+  updatedStart,
+  updatedEnd,
+  filterBarcode = "all",
   sortBy = "createdAt",
   sortOrder = "desc",
 }) => {
@@ -20,10 +24,33 @@ export const getAllSpareParts = async ({
     const skip = (Number(page) - 1) * Number(pageSize);
     const take = Number(pageSize);
 
-    // Build WHERE
     const where = {};
 
-    // Search di nama atau brand
+    // ✅ CREATED RANGE
+    if (createdStart || createdEnd) {
+      where.createdAt = {
+        ...(createdStart && {
+          gte: new Date(new Date(createdStart).setHours(0, 0, 0, 0)),
+        }),
+        ...(createdEnd && {
+          lte: new Date(new Date(createdEnd).setHours(23, 59, 59, 999)),
+        }),
+      };
+    }
+
+    // ✅ UPDATED RANGE
+    if (updatedStart || updatedEnd) {
+      where.updatedAt = {
+        ...(updatedStart && {
+          gte: new Date(new Date(updatedStart).setHours(0, 0, 0, 0)),
+        }),
+        ...(updatedEnd && {
+          lte: new Date(new Date(updatedEnd).setHours(23, 59, 59, 999)),
+        }),
+      };
+    }
+
+    // ✅ SEARCH
     if (search) {
       where.OR = [
         { nama: { contains: search, mode: "insensitive" } },
@@ -31,36 +58,30 @@ export const getAllSpareParts = async ({
       ];
     }
 
-    // Filter barcode
+    // ✅ BRAND FILTER
+    if (brand) {
+      where.brand = {
+        contains: brand,
+        mode: "insensitive",
+      };
+    }
+
+    // ✅ PENEMPATAN FILTER (FIXED)
+    if (penempatan) {
+      where.penempatan = {
+        contains: penempatan,
+        mode: "insensitive",
+      };
+    }
+
+    // ✅ FILTER BARCODE
     if (filterBarcode === "with") {
       where.barcode = { not: "" };
     } else if (filterBarcode === "without") {
       where.barcode = "";
     }
 
-    // Filter createdAt (exact date)
-    if (createdAt) {
-      const date = new Date(createdAt);
-      if (isNaN(date.getTime()))
-        throw new Error("Format createdAt tidak valid");
-      where.createdAt = {
-        gte: new Date(date.setUTCHours(0, 0, 0, 0)),
-        lte: new Date(date.setUTCHours(23, 59, 59, 999)),
-      };
-    }
-
-    // Filter updatedAt → updatedAt
-    if (updatedAt) {
-      const date = new Date(updatedAt);
-      if (isNaN(date.getTime()))
-        throw new Error("Format updatedAt tidak valid");
-      where.updatedAt = {
-        gte: new Date(date.setUTCHours(0, 0, 0, 0)),
-        lte: new Date(date.setUTCHours(23, 59, 59, 999)),
-      };
-    }
-
-    // Validasi sort field
+    // ✅ SORT VALIDATION
     const allowedSort = [
       "barcode",
       "nama",
@@ -71,7 +92,9 @@ export const getAllSpareParts = async ({
       "createdAt",
       "updatedAt",
     ];
+
     const sortField = allowedSort.includes(sortBy) ? sortBy : "createdAt";
+
     const sortDir = sortOrder === "asc" ? "asc" : "desc";
 
     const [data, total] = await prisma.$transaction([
@@ -107,7 +130,8 @@ export const getAllSpareParts = async ({
       },
     };
   } catch (error) {
-    console.log(error);
+    console.error("Error getAllSpareParts:", error);
+    throw error;
   }
 };
 
@@ -115,11 +139,19 @@ export const getAllSpareParts = async ({
 // CREATE
 // -------------------------
 export const createSparePart = async (data, user) => {
-  const { barcode, nama, kategori, brand, stok, hargaModal, hargaJual } = data;
+  const {
+    barcode,
+    nama,
+    kategori,
+    brand,
+    stok,
+    hargaModal,
+    hargaJual,
+    penempatan,
+  } = data;
 
   // Validasi wajib
   if (
-    !barcode ||
     !nama ||
     !brand ||
     stok == null ||
@@ -135,7 +167,7 @@ export const createSparePart = async (data, user) => {
       nama,
       kategori,
       brand,
-      penempatan: user.penempatan,
+      penempatan,
       stok: Number(stok),
       hargaModal: Number(hargaModal),
       hargaJual: Number(hargaJual),

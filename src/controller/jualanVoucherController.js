@@ -96,13 +96,23 @@ export const getAllTransaksi = async (req, res) => {
 // GET /api/laporan/voucher-terlaris
 export const getVoucherTerlaris = async (req, res) => {
   try {
-    const { periode = "semua", startDate, endDate, search, brand } = req.query;
+    const {
+      periode = "semua",
+      startDate,
+      endDate,
+      search,
+      brand,
+      page,
+      pageSize,
+    } = req.query;
     const data = await getLaporanVoucherTerlaris({
       periode,
       startDate,
       endDate,
       search,
       brand,
+      page,
+      pageSize,
     });
     res.json({ success: true, data });
   } catch (error) {

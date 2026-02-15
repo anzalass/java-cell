@@ -1,5 +1,6 @@
 // src/services/transaksiHarian.service.js
 import { PrismaClient } from "@prisma/client";
+import { createLog } from "./logService.js";
 
 const prisma = new PrismaClient();
 
@@ -49,6 +50,7 @@ export const createJualanHarian = async ({
   penempatan,
   idUser,
   idMember,
+  user,
 }) => {
   if (!kategori || !nominal) {
     throw new Error("Kategori dan nominal wajib diisi");
@@ -85,6 +87,13 @@ export const createJualanHarian = async ({
       },
     });
   }
+
+  await createLog({
+    kategori: "Trx Harian",
+    keterangan: `${user.nama} telah melakukan Trx harian`,
+    nominal: nominal,
+    nama: user.nama,
+  });
 };
 
 // ✅ CREATE Kejadian Tak Terduga
@@ -94,12 +103,13 @@ export const createKejadianTakTerduga = async ({
   no_transaksi,
   penempatan,
   idUser,
+  user,
 }) => {
   if (!keterangan || nominal == null || no_transaksi == null) {
     throw new Error("Semua field wajib diisi");
   }
 
-  return await prisma.kejadianTakTerduga.create({
+  await prisma.kejadianTakTerduga.create({
     data: {
       keterangan,
       penempatan,
@@ -114,12 +124,35 @@ export const createKejadianTakTerduga = async ({
       },
     },
   });
+
+  await createLog({
+    kategori: "Kejadian Tak Terduga",
+    keterangan: `${user.nama} telah membuat kejadian tak terduga`,
+    nominal: nominal,
+    nama: user.nama,
+  });
 };
 
 // ✅ DELETE (sama seperti sebelumnya)
-export const deleteJualanHarian = async (id) => {
+export const deleteJualanHarian = async (id, user) => {
+  const jualan = await prisma.jualanHarian.findUnique({
+    where: {
+      id,
+    },
+  });
+
+  if (!jualan) {
+    throw new Error("Jualan ga ditemuin");
+  }
+
   await prisma.jualanHarian.delete({ where: { id } });
-  return { success: true };
+
+  await createLog({
+    kategori: "Trx Harian",
+    keterangan: `${user.nama} telah mmenghapus Trx harian`,
+    nominal: jualan.nominal,
+    nama: user.nama,
+  });
 };
 
 // ✅ GET ALL dengan filter & pagination
@@ -234,7 +267,21 @@ export const getLaporanKeuangan = async ({
 };
 
 // ✅ DELETE Kejadian Tak Terduga
-export const deleteKejadianTakTerduga = async (id) => {
+export const deleteKejadianTakTerduga = async (id, user) => {
+  const data = await prisma.kejadianTakTerduga.findUnique({
+    where: {
+      id,
+    },
+  });
+
+  if (!data) {
+    throw new Error("Kejadian tak terduga ga ada");
+  }
   await prisma.kejadianTakTerduga.delete({ where: { id } });
-  return { success: true };
+  await createLog({
+    kategori: "Kejadian Tak Terduga",
+    keterangan: `${user.nama} telah menghapus Kejadian Tak Terduga : ${data.keterangan}`,
+    nominal: data.nominal,
+    nama: user.nama,
+  });
 };

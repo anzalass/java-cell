@@ -579,6 +579,7 @@ export const dashboardPageService2 = async (
           keterangan: true,
           keuntungan: true,
           namaPelangan: true,
+          noHP: true,
           biayaJasa: true,
           penempatan: true,
           tanggal: true,
@@ -704,5 +705,77 @@ export const dashboardPageService2 = async (
   } catch (error) {
     console.error("Dashboard query error:", error);
     throw new Error("Gagal memuat data dashboard");
+  }
+};
+
+export const cariSparepart = async (keyword = "") => {
+  try {
+    const keywords = keyword.split(" ").filter(Boolean);
+
+    return await prisma.sparePart.findMany({
+      where: {
+        AND: keywords.map((word) => ({
+          nama: {
+            contains: word,
+            mode: "insensitive",
+          },
+        })),
+      },
+      orderBy: {
+        nama: "asc",
+      },
+      take: 20,
+    });
+  } catch (error) {
+    console.error("Error cariSparepart:", error);
+    throw error;
+  }
+};
+
+export const cariVoucher = async (keyword = "") => {
+  try {
+    const keywords = keyword.split(" ").filter(Boolean);
+
+    return await prisma.voucher.findMany({
+      where: {
+        AND: keywords.map((word) => ({
+          nama: {
+            contains: word,
+            mode: "insensitive",
+          },
+        })),
+      },
+      orderBy: {
+        nama: "asc",
+      },
+      take: 20,
+    });
+  } catch (error) {
+    console.error("Error cariSparepart:", error);
+    throw error;
+  }
+};
+
+export const cariAksesoris = async (keyword = "") => {
+  try {
+    const keywords = keyword.split(" ").filter(Boolean);
+
+    return await prisma.aksesoris.findMany({
+      where: {
+        AND: keywords.map((word) => ({
+          nama: {
+            contains: word,
+            mode: "insensitive",
+          },
+        })),
+      },
+      orderBy: {
+        nama: "asc",
+      },
+      take: 20,
+    });
+  } catch (error) {
+    console.error("Error cariSparepart:", error);
+    throw error;
   }
 };

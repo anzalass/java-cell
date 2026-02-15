@@ -15,12 +15,13 @@ export const createServiceHPHandler = async (req, res) => {
       biayaJasa,
       sparePart,
       idMember,
+      noHP,
       namaPelanggan,
     } = req.body;
     const penempatan = req.user.penempatan;
     const idUser = req.user.id;
 
-    if (!brandHP || !keterangan || !status || biayaJasa == null) {
+    if (!brandHP || !keterangan || !status || biayaJasa == null || !noHP) {
       return res.status(400).json({ error: "Field wajib tidak lengkap" });
     }
 
@@ -31,6 +32,7 @@ export const createServiceHPHandler = async (req, res) => {
       biayaJasa: Number(biayaJasa),
       sparePart,
       idMember,
+      noHP,
       idUser,
       penempatan,
       namaPelanggan,

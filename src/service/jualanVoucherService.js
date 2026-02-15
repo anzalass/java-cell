@@ -196,8 +196,8 @@ export const getAllTransaksiVoucher = async ({
           },
         },
         orderBy: { createdAt: "desc" },
-        skip,
-        take,
+        // skip,
+        // take,
       }),
       prisma.transaksiVoucherHarian.count({ where }),
     ]);
@@ -326,7 +326,8 @@ export const getLaporanVoucherTerlaris = async ({
     /* ===============================
        2️⃣ PAGINATION (SETELAH SORT)
     =============================== */
-    const pagedGrouped = grouped.slice(skip, skip + take);
+    // const pagedGrouped = grouped.slice(skip, skip + take);
+    const pagedGrouped = grouped;
 
     /* ===============================
        3️⃣ FILTER VOUCHER
