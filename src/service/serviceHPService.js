@@ -328,3 +328,24 @@ export const getAllServiceHP = async ({
     },
   };
 };
+
+export const getDetailServiceHP = async (id) => {
+  const data = await prisma.serviceHP.findUnique({
+    where: { id },
+    include: {
+      Member: true,
+      User: true,
+      Sparepart: {
+        include: {
+          Sparepart: true, // ambil detail nama & harga sparepart
+        },
+      },
+    },
+  });
+
+  if (!data) {
+    throw new Error("Service tidak ditemukan");
+  }
+
+  return data;
+};

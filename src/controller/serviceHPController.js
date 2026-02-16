@@ -4,6 +4,7 @@ import {
   updateServiceHPStatus,
   deleteServiceHP,
   getAllServiceHP,
+  getDetailServiceHP,
 } from "../service/serviceHPService.js";
 
 export const createServiceHPHandler = async (req, res) => {
@@ -90,5 +91,16 @@ export const getAllServiceHPHandler = async (req, res) => {
   } catch (error) {
     console.error("Get Service Error:", error);
     res.status(400).json({ error: error.message });
+  }
+};
+
+export const getDetailService = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = await getDetailServiceHP(id);
+
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(404).json({ success: false, message: err.message });
   }
 };

@@ -3,6 +3,7 @@ import {
   createServiceHPHandler,
   deleteServiceHPHandler,
   getAllServiceHPHandler,
+  getDetailService,
   updateServiceHPStatusHandler,
 } from "../controller/serviceHPController.js";
 import { AuthMiddleware } from "../utils/authMiddleware.js";
@@ -20,6 +21,7 @@ router.patch(
 );
 
 router.get("/service-hp", AuthMiddleware, getAllServiceHPHandler);
+router.get("/service-hp-print/:id", getDetailService);
 
 // DELETE /api/service-hp/:id      → Hapus service
 router.delete("/service-hp/:id", AuthMiddleware, deleteServiceHPHandler);
