@@ -22,14 +22,17 @@ export const createGrosirOrderHandler = async (req, res) => {
       return res.status(400).json({ error: "Items harus berupa array" });
     }
 
-    const result = await createGrosirOrder({
-      kodeDownline,
-      items,
-      tanggal,
-      keuntungan,
-      penempatan,
-      idUser,
-    });
+    const result = await createGrosirOrder(
+      {
+        kodeDownline,
+        items,
+        tanggal,
+        keuntungan,
+        penempatan,
+        idUser,
+      },
+      req.user
+    );
     res.status(201).json(result);
   } catch (error) {
     console.error("Create grosir order error:", error);
@@ -66,13 +69,16 @@ export const createGrosirOrderHandler2 = async (req, res) => {
 // GET /api/transaksi/grosir
 export const getAllTransaksiGrosirHandler = async (req, res) => {
   try {
-    const { page, pageSize, search, startDate, endDate } = req.query;
+    const { page, pageSize, search, startDate, endDate, deletedFilter } =
+      req.query;
     const result = await getAllTransaksiGrosir({
       page,
       pageSize,
       search,
       startDate,
       endDate,
+      idToko: req.user.toko_id,
+      deletedFilter,
     });
     res.json(result);
   } catch (error) {
@@ -152,6 +158,7 @@ export const getLaporanBarangKeluarHandler = async (req, res) => {
       searchNama,
       sortQty,
       brand,
+      idToko: req.user.toko_id,
     });
 
     res.json(result);

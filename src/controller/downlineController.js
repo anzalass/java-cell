@@ -10,7 +10,15 @@ import {
 
 export const getAllDownlinesHandler = async (req, res) => {
   try {
-    const result = await getAllDownlines(req.query);
+    const result = await getAllDownlines({
+      createdAt: req.query.createdAt,
+      idToko: req.user.toko_id,
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+      search: req.query.search,
+      sortBy: req.query.sortBy,
+      sortOrder: req.query.sortOrder,
+    });
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -55,7 +63,7 @@ export const deleteDownlineHandler = async (req, res) => {
 
 export const getDownlineMaster = async (req, res) => {
   try {
-    const data = await masterDownlines();
+    const data = await masterDownlines(req.user);
     return res.status(200).json(data);
   } catch (error) {
     return res.status(500).json({ error: error.message });

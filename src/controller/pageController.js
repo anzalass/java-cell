@@ -12,7 +12,7 @@ import {
 
 export const dashboardAdminPageController = async (req, res, next) => {
   try {
-    const result = await dashboardPageService();
+    const result = await dashboardPageService(req.user);
     return res
       .status(201)
       .json({ message: "Berhasil Mendapatkan Data", result });
@@ -25,7 +25,7 @@ export const dashboardAdminPageController = async (req, res, next) => {
 
 export const grosirVoucherPageController = async (req, res, next) => {
   try {
-    const result = await grosirVoucherPageService();
+    const result = await grosirVoucherPageService(req.user);
     return res
       .status(201)
       .json({ message: "Berhasil Mendapatkan Data", result });
@@ -38,7 +38,7 @@ export const grosirVoucherPageController = async (req, res, next) => {
 
 export const transaksiAksesorisPageController = async (req, res, next) => {
   try {
-    const result = await transaksiAksesorisPageService();
+    const result = await transaksiAksesorisPageService(req.user);
     return res
       .status(201)
       .json({ message: "Berhasil Mendapatkan Data", result });
@@ -51,7 +51,7 @@ export const transaksiAksesorisPageController = async (req, res, next) => {
 
 export const transaksiSparepartAdminPageController = async (req, res, next) => {
   try {
-    const result = await transaksiSparepartPageService();
+    const result = await transaksiSparepartPageService(req.user);
     return res
       .status(201)
       .json({ message: "Berhasil Mendapatkan Data", result });
@@ -64,7 +64,7 @@ export const transaksiSparepartAdminPageController = async (req, res, next) => {
 
 export const serviceHPAdminPageController = async (req, res, next) => {
   try {
-    const result = await serviceHPPageService();
+    const result = await serviceHPPageService(req.user);
     return res
       .status(201)
       .json({ message: "Berhasil Mendapatkan Data", result });
@@ -178,7 +178,7 @@ export const cariSparepartController = async (req, res) => {
   try {
     const { q = "" } = req.query;
 
-    const data = await cariSparepart(q);
+    const data = await cariSparepart(q, req.user);
 
     return res.status(200).json({
       success: true,
@@ -202,7 +202,7 @@ export const cariVoucherController = async (req, res) => {
   try {
     const { q = "" } = req.query;
 
-    const data = await cariVoucher(q);
+    const data = await cariVoucher(q, req.user);
 
     return res.status(200).json({
       success: true,
@@ -226,7 +226,7 @@ export const cariAksesorisController = async (req, res) => {
   try {
     const { q = "" } = req.query;
 
-    const data = await cariAksesoris(q);
+    const data = await cariAksesoris(q, req.user);
 
     return res.status(200).json({
       success: true,

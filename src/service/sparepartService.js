@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { createLog } from "./logService.js";
 const prisma = new PrismaClient();
 
 // src/services/sparepart.service.js
@@ -6,25 +7,30 @@ const prisma = new PrismaClient();
 // -------------------------
 // GET ALL with filter & pagination
 // -------------------------
-export const getAllSpareParts = async ({
-  page = 1,
-  pageSize = 10,
-  search = "",
-  brand = "",
-  penempatan = "",
-  createdStart,
-  createdEnd,
-  updatedStart,
-  updatedEnd,
-  filterBarcode = "all",
-  sortBy = "createdAt",
-  sortOrder = "desc",
-}) => {
+export const getAllSpareParts = async (
+  {
+    page = 1,
+    pageSize = 10,
+    search = "",
+    brand = "",
+    penempatan = "",
+    createdStart,
+    createdEnd,
+    updatedStart,
+    updatedEnd,
+    filterBarcode = "all",
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  },
+  user
+) => {
   try {
     const skip = (Number(page) - 1) * Number(pageSize);
     const take = Number(pageSize);
 
     const where = {};
+    where.isActive = true;
+    where.idToko = user.toko_id;
 
     // ✅ CREATED RANGE
     if (createdStart || createdEnd) {
@@ -49,6 +55,12 @@ export const getAllSpareParts = async ({
         }),
       };
     }
+
+    if (!user) {
+      throw new Error("Toko tidak ditemukan");
+    }
+
+    where.idToko = user.toko_id;
 
     // ✅ SEARCH
     if (search) {
@@ -161,7 +173,7 @@ export const createSparePart = async (data, user) => {
     throw new Error("Field wajib tidak lengkap");
   }
 
-  return await prisma.sparePart.create({
+  await prisma.sparePart.create({
     data: {
       barcode,
       nama,
@@ -173,7 +185,15 @@ export const createSparePart = async (data, user) => {
       hargaJual: Number(hargaJual),
       createdAt: new Date(),
       updatedAt: new Date(),
+      idToko: user.toko_id,
     },
+  });
+
+  await createLog({
+    kategori: "Sparepart",
+    keterangan: `${user.nama} telah menambahkan sparepart baru ${nama}`,
+    nama: user.nama,
+    idToko: user.toko_id,
   });
 };
 
@@ -191,10 +211,10 @@ export const getSparePartById = async (id) => {
 // -------------------------
 // UPDATE
 // -------------------------
-export const updateSparePart = async (id, data) => {
+export const updateSparePart = async (id, data, user) => {
   const { barcode, nama, kategori, brand, stok, hargaModal, hargaJual } = data;
 
-  return await prisma.sparePart.update({
+  const sparePart = await prisma.sparePart.update({
     where: { id },
     data: {
       ...(barcode !== undefined && { barcode }),
@@ -207,18 +227,32 @@ export const updateSparePart = async (id, data) => {
       updatedAt: new Date(),
     },
   });
-};
 
-// -------------------------
-// DELETE
-// -------------------------
-export const deleteSparePart = async (id) => {
-  return await prisma.sparePart.delete({
-    where: { id },
+  await createLog({
+    kategori: "Sparepart",
+    keterangan: `Mengupdate Sparepart menjadi ${sparePart.nama}  `,
+    nama: user.nama,
+    idToko: user.toko_id,
   });
 };
 
-export const updateSparePartStok = async (id, { tipe, stok }) => {
+export const deleteSparePart = async (id, user) => {
+  const sparePart = await prisma.sparePart.update({
+    where: { id },
+    data: {
+      isActive: false,
+    },
+  });
+
+  await createLog({
+    kategori: "Sparepart",
+    keterangan: `Menghapus Sparepart ${sparePart.nama}  `,
+    nama: user.nama,
+    idToko: user.toko_id,
+  });
+};
+
+export const updateSparePartStok = async (id, { tipe, stok }, user) => {
   // Validasi
   if (!["tambah", "kurang"].includes(tipe)) {
     console.log(tipe);
@@ -256,13 +290,25 @@ export const updateSparePartStok = async (id, { tipe, stok }) => {
       },
     });
 
+    await createLog({
+      kategori: "Sparepart",
+      keterangan: ` Stok Sparepart ${updated.nama} telah di ${tipe} ${stok} pcs `,
+      nama: user.nama,
+      idToko: user.toko_id,
+    });
+
     return updated;
   });
 };
 
-export const sparePartMaster = async () => {
+export const sparePartMaster = async (user) => {
   try {
-    return await prisma.sparePart.findMany({});
+    return await prisma.sparePart.findMany({
+      where: {
+        idToko: user.toko_id,
+        isActive: true,
+      },
+    });
   } catch (error) {
     console.log(error);
 

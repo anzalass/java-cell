@@ -23,7 +23,7 @@ export const createVoucherHandler = async (req, res) => {
 // GET /api/vouchers
 export const getVouchersHandler = async (req, res) => {
   try {
-    const result = await getVouchers(req.query);
+    const result = await getVouchers(req.query, req.user);
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -43,7 +43,7 @@ export const getVoucherByIdHandler = async (req, res) => {
 // PUT /api/vouchers/:id
 export const updateVoucherHandler = async (req, res) => {
   try {
-    const result = await updateVoucher(req.params.id, req.body);
+    const result = await updateVoucher(req.params.id, req.body, req.user);
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -53,7 +53,7 @@ export const updateVoucherHandler = async (req, res) => {
 // DELETE /api/vouchers/:id
 export const deleteVoucherHandler = async (req, res) => {
   try {
-    const result = await deleteVoucher(req.params.id);
+    const result = await deleteVoucher(req.params.id, req.user);
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -83,7 +83,7 @@ export const updateStokVoucherHandler = async (req, res) => {
 
 export const getVoucherMaster = async (req, res) => {
   try {
-    const data = await voucherMaster();
+    const data = await voucherMaster(req.user);
     return res.status(200).json(data);
   } catch (error) {
     console.error(error);

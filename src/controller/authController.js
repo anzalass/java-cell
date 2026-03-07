@@ -17,6 +17,7 @@ export const getAllUsersHandler = async (req, res) => {
       search,
       role,
       penempatan,
+      idToko: req.user.id_toko,
     });
     res.json(result);
   } catch (error) {
@@ -103,6 +104,7 @@ export const loginController2 = async (req, res) => {
         nama: result.nama,
         token: result.token,
         exp: result.expiresIn,
+        toko_id: result.toko_id,
       },
     });
   } catch (error) {

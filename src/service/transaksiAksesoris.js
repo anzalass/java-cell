@@ -1,19 +1,15 @@
 // src/services/transaksiAksesoris.service.js
 import { PrismaClient } from "@prisma/client";
 import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
+import { createLog } from "./logService.js";
 
 const prisma = new PrismaClient();
 
 // CREATE
-export const createTransaksiAksesoris = async ({
-  items,
-  nama,
-  keuntungan,
-  status = "selesai",
-  idMember,
-  penempatan,
-  idUser,
-}) => {
+export const createTransaksiAksesoris = async (
+  { items, nama, keuntungan, status = "selesai", idMember, penempatan, idUser },
+  user
+) => {
   if (!items || !Array.isArray(items) || items.length === 0) {
     throw new Error("Item transaksi tidak boleh kosong");
   }
@@ -75,12 +71,32 @@ export const createTransaksiAksesoris = async ({
       data: {
         totalHarga,
         namaPembeli: nama ? nama : namaRandom,
-        keuntungan: keuntungan,
-        idMember: idMember,
-        penempatan,
-        idUser,
+        keuntungan,
+
+        ...(idMember && {
+          Member: {
+            connect: { id: idMember },
+          },
+        }),
+
+        Toko: {
+          connect: { id: user.toko_id },
+        },
+
         tanggal: new Date(`${tanggal}T00:00:00Z`),
         status,
+        items: {
+          create: itemsToCreate.map((item) => ({
+            quantity: item.quantity,
+            tanggal: new Date(`${tanggal}T00:00:00Z`),
+            Toko: {
+              connect: { id: user.toko_id },
+            },
+            Aksesoris: {
+              connect: { id: item.idAksesoris },
+            },
+          })),
+        },
       },
     });
 
@@ -89,29 +105,15 @@ export const createTransaksiAksesoris = async ({
         where: { id: item.idAksesoris },
         data: { stok: { decrement: item.quantity } },
       });
-
-      await tx.itemsTransaksiAksesoris.create({
-        data: {
-          idTransaksi: transaksi.id,
-          idAksesoris: item.idAksesoris,
-          quantity: item.quantity,
-          tanggal: new Date(`${tanggal}T00:00:00Z`),
-        },
-      });
     }
 
-    if (memberId) {
-      await tx.member.update({
-        where: {
-          id: idMember, // pastikan `noTelp` unique!
-        },
-        data: {
-          totalTransaksi: {
-            increment: keuntungan, // ✅ Tambahkan nilai ini
-          },
-        },
-      });
-    }
+    await createLog({
+      kategori: "Transaksi Aksesoris",
+      keterangan: `${user.nama} telah membuat Transaksi Aksesoris`,
+      nominal: transaksi.keuntungan,
+      nama: user.nama,
+      idToko: user.toko_id,
+    });
     return { id: transaksi.id, totalHarga };
   });
 };
@@ -124,25 +126,37 @@ export const getAllTransaksiAksesoris = async ({
   startDate,
   endDate,
   status,
+  idToko,
+  deletedFilter = "active", // ✅ PARAM BARU
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
 
-  const where = {};
+  const where = {
+    idToko,
+  };
 
-  // Filter pencarian (namaPembeli)
+  // ✅ Flexible deletedAt filter
+  if (deletedFilter === "active") {
+    where.deletedAt = null;
+  } else if (deletedFilter === "deleted") {
+    where.deletedAt = { not: null };
+  }
+  // kalau "all" → tidak set deletedAt sama sekali
+
+  // 🔍 Filter pencarian
   if (search) {
     where.namaPembeli = { contains: search, mode: "insensitive" };
   }
 
-  // Filter tanggal
+  // 📅 Filter tanggal
   if (startDate || endDate) {
     where.tanggal = {};
     if (startDate) where.tanggal.gte = new Date(startDate);
     if (endDate) where.tanggal.lte = new Date(endDate);
   }
 
-  // Filter status
+  // 📌 Filter status
   if (status) {
     where.status = status;
   }
@@ -150,14 +164,18 @@ export const getAllTransaksiAksesoris = async ({
   const [data, total] = await prisma.$transaction([
     prisma.transaksiAksesoris.findMany({
       where,
-      // skip,
-      // take,
+      skip,
+      take,
       orderBy: { tanggal: "desc" },
       include: {
         items: {
           include: {
             Aksesoris: {
-              select: { nama: true, hargaModal: true, hargaJual: true },
+              select: {
+                nama: true,
+                hargaModal: true,
+                hargaJual: true,
+              },
             },
           },
         },
@@ -166,7 +184,6 @@ export const getAllTransaksiAksesoris = async ({
     prisma.transaksiAksesoris.count({ where }),
   ]);
 
-  // Format data untuk frontend
   const formatted = data.map((trx) => {
     const totalKeuntungan = trx.items.reduce((sum, item) => {
       const modal = item.Aksesoris.hargaModal || 0;
@@ -179,8 +196,9 @@ export const getAllTransaksiAksesoris = async ({
       namaPembeli: trx.namaPembeli,
       totalHarga: trx.totalHarga,
       keuntungan: trx.keuntungan || totalKeuntungan,
-      tanggal: trx.tanggal.toISOString().split("T")[0],
+      tanggal: trx.createdAt,
       status: trx.status,
+      deletedAt: trx.deletedAt,
       detail: {
         itemTransaksi: trx.items.map((item) => ({
           id: item.id,
@@ -205,7 +223,7 @@ export const getAllTransaksiAksesoris = async ({
 };
 
 // ✅ DELETE (rollback stok)
-export const deleteTransaksiAksesoris = async (idTransaksi) => {
+export const deleteTransaksiAksesoris = async (idTransaksi, user) => {
   return await prisma.$transaction(async (tx) => {
     // Cari transaksi
     const transaksi = await tx.transaksiAksesoris.findUnique({
@@ -225,14 +243,30 @@ export const deleteTransaksiAksesoris = async (idTransaksi) => {
       });
     }
 
-    // Hapus items terlebih dahulu
-    await tx.itemsTransaksiAksesoris.deleteMany({
-      where: { idTransaksi },
+    const now = new Date();
+    const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    await tx.transaksiAksesoris.update({
+      where: { id: idTransaksi },
+      data: {
+        deletedAt: wib,
+      },
     });
 
-    // Hapus transaksi utama
-    await tx.transaksiAksesoris.delete({
-      where: { id: idTransaksi },
+    await tx.itemsTransaksiAksesoris.updateMany({
+      where: {
+        idTransaksi: idTransaksi,
+      },
+      data: {
+        deletedAt: wib,
+      },
+    });
+
+    await createLog({
+      kategori: "Transaksi Aksesoris",
+      keterangan: `${user.nama} telah menghapus Transaksi Aksesoris`,
+      nominal: transaksi.keuntungan,
+      nama: user.nama,
+      idToko: user.toko_id,
     });
 
     return { success: true };
@@ -279,15 +313,18 @@ const getDateRange = (period, startDate, endDate) => {
   return { start: new Date("1970-01-01"), end: now };
 };
 
-export const getLaporanBarangKeluar = async ({
-  page = 1,
-  pageSize = 10,
-  filterPeriod = "all",
-  startDate,
-  endDate,
-  searchNama = "",
-  sortQty = "none", // "asc", "desc", "none"
-}) => {
+export const getLaporanBarangKeluar = async (
+  {
+    page = 1,
+    pageSize = 10,
+    filterPeriod = "all",
+    startDate,
+    endDate,
+    searchNama = "",
+    sortQty = "none", // "asc", "desc", "none"
+  },
+  user
+) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
 
@@ -300,11 +337,13 @@ export const getLaporanBarangKeluar = async ({
       gte: start,
       lte: end,
     },
+    idToko: user.toko_id,
     ...(searchNama && {
       Aksesoris: {
         nama: { contains: searchNama, mode: "insensitive" },
       },
     }),
+    deletedAt: null,
   };
 
   const allItems = await prisma.itemsTransaksiAksesoris.findMany({
@@ -390,4 +429,24 @@ export const getLaporanBarangKeluar = async ({
       totalPages: Math.ceil(totalCount / take),
     },
   };
+};
+
+export const getDetailTransaksiAksesoris = async (id) => {
+  const transaksi = await prisma.transaksiAksesoris.findUnique({
+    where: { id },
+    include: {
+      Member: true,
+      items: {
+        include: {
+          Aksesoris: true,
+        },
+      },
+    },
+  });
+
+  if (!transaksi) {
+    throw new Error("Transaksi tidak ditemukan");
+  }
+
+  return transaksi;
 };

@@ -3,15 +3,10 @@ import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
 const prisma = new PrismaClient();
 
 // src/services/grosir.service.js
-export const createGrosirOrder = async ({
-  kodeDownline,
-  items,
-  tanggal,
-  keuntungan,
-  idUser,
-  penempatan,
-  status,
-}) => {
+export const createGrosirOrder = async (
+  { kodeDownline, items, tanggal, keuntungan, idUser, penempatan, status },
+  user
+) => {
   // Validasi input
   if (!kodeDownline) throw new Error("Kode downline wajib diisi");
   if (!items || !Array.isArray(items) || items.length === 0) {
@@ -79,36 +74,50 @@ export const createGrosirOrder = async ({
     // 3. Buat transaksi utama
     const transaksi = await tx.transaksiVoucherDownline.create({
       data: {
-        kodeDownline,
+        downline: {
+          connect: { kodeDownline: kodeDownline },
+        },
+
         totalHarga,
-        penempatan: penempatan ? penempatan : "Java 1",
-        idUser,
-        keuntungan: keuntungan,
-        tanggal: new Date(`${tanggal}T00:00:00Z`), // sesuai model: `tanggal DateTime`
-        status: status ? status : "Selesai", // atau "pending", "dibayar", dll
+
+        Toko: {
+          connect: { id: user.toko_id },
+        },
+
+        keuntungan,
+
+        tanggal: new Date(`${tanggal}T00:00:00Z`),
+
+        status: status ? status : "Selesai",
+
+        items: {
+          create: itemsToCreate.map((item) => ({
+            quantity: item.quantity,
+
+            tanggal: new Date(`${tanggal}T00:00:00Z`),
+
+            Toko: {
+              connect: { id: user.toko_id },
+            },
+
+            Voucher: {
+              connect: { id: item.idVoucher },
+            },
+          })),
+        },
       },
     });
 
-    // 4. Buat item transaksi + kurangi stok
-    for (const item of itemsToCreate) {
-      const { idVoucher, quantity } = item;
-
-      // Kurangi stok
-      await tx.voucher.update({
-        where: { id: idVoucher },
-        data: { stok: { decrement: quantity } },
-      });
-
-      // Buat item transaksi
-      await tx.itemsTransaksiVoucherDownline.create({
-        data: {
-          idTransaksi: transaksi.id,
-          idVoucher,
-          quantity,
-          tanggal: new Date(`${tanggal}T00:00:00Z`), // sesuai model: `tanggal DateTime`
-        },
-      });
-    }
+    await Promise.all(
+      itemsToCreate.map((item) =>
+        tx.voucher.update({
+          where: { id: item.idVoucher },
+          data: {
+            stok: { decrement: item.quantity },
+          },
+        })
+      )
+    );
 
     return {
       id: transaksi.id,
@@ -161,14 +170,24 @@ export const deletePendingTransaksi = async (idTransaksi) => {
       });
     }
 
+    // Hapus items terlebih dahulu
+    const now = new Date();
+    const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+
     // 4. Hapus semua item transaksi
-    await tx.itemsTransaksiVoucherDownline.deleteMany({
+    await tx.itemsTransaksiVoucherDownline.updateMany({
       where: { idTransaksi: transaksi.id },
+      data: {
+        deletedAt: wib,
+      },
     });
 
     // 5. Hapus transaksi utama
-    await tx.transaksiVoucherDownline.delete({
+    await tx.transaksiVoucherDownline.update({
       where: { id: transaksi.id },
+      data: {
+        deletedAt: wib,
+      },
     });
 
     return {
@@ -178,6 +197,65 @@ export const deletePendingTransaksi = async (idTransaksi) => {
   });
 };
 
+export const deleteTransaksi = async (idTransaksi) => {
+  if (!idTransaksi) {
+    throw new Error("ID transaksi wajib diisi");
+  }
+
+  return await prisma.$transaction(async (tx) => {
+    // 1. Cari transaksi
+    const transaksi = await tx.transaksiVoucherDownline.findUnique({
+      where: { id: idTransaksi },
+      include: {
+        items: {
+          include: {
+            Voucher: {
+              select: { id: true, stok: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!transaksi) {
+      throw new Error("Transaksi tidak ditemukan");
+    }
+
+    console.log("trxc", transaksi.status);
+
+    // 3. Kembalikan stok untuk setiap item
+    for (const item of transaksi.items) {
+      await tx.voucher.update({
+        where: { id: item.Voucher.id },
+        data: { stok: { increment: item.quantity } },
+      });
+    }
+
+    const now = new Date();
+    const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+
+    // 4. Hapus semua item transaksi
+    await tx.itemsTransaksiVoucherDownline.updateMany({
+      where: { idTransaksi: transaksi.id },
+      data: {
+        deletedAt: wib,
+      },
+    });
+
+    // 5. Hapus transaksi utama
+    await tx.transaksiVoucherDownline.update({
+      where: { id: transaksi.id },
+      data: {
+        deletedAt: wib,
+      },
+    });
+
+    return {
+      success: true,
+      message: "Transaksi berhasil dihapus dan stok dikembalikan",
+    };
+  });
+};
 // src/services/transaksiGrosir.service.js
 
 // GET ALL with filter & pagination
@@ -187,12 +265,19 @@ export const getAllTransaksiGrosir = async ({
   search = "", // kodeDownline
   startDate,
   endDate,
+  idToko,
+  deletedFilter = "active",
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
 
   const where = {};
-
+  where.idToko = idToko;
+  if (deletedFilter === "active") {
+    where.deletedAt = null;
+  } else if (deletedFilter === "deleted") {
+    where.deletedAt = { not: null };
+  }
   // Filter kodeDownline
   if (search) {
     where.kodeDownline = { contains: search, mode: "insensitive" };
@@ -245,7 +330,7 @@ export const getAllTransaksiGrosir = async ({
       kodeDownline: trx.kodeDownline,
       downline: trx.downline,
       totalHarga: trx.totalHarga,
-      tanggal: trx.tanggal.toISOString().split("T")[0], // "YYYY-MM-DD"
+      tanggal: trx.createdAt,
       status: trx.status,
       keuntungan: trx.keuntungan,
       detail: {
@@ -278,8 +363,6 @@ export const updateTransaksiStatus = async (id, status) => {
   if (!allowedStatus.includes(status)) {
     throw new Error("Status tidak valid");
   }
-
-  console.log("stts", status);
 
   return await prisma.transaksiVoucherDownline.update({
     where: { id },
@@ -338,6 +421,7 @@ export const getLaporanBarangKeluar = async ({
   searchNama = "",
   brand = "", // ✅ TAMBAH BRAND
   sortQty = "none",
+  idToko,
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
@@ -353,6 +437,8 @@ export const getLaporanBarangKeluar = async ({
       gte: start,
       lte: end,
     },
+    idToko: idToko,
+    deletedAt: null,
     Voucher: {
       ...(searchNama && {
         nama: { contains: searchNama, mode: "insensitive" },

@@ -4,9 +4,15 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 // ✅ CREATE Log
-export const createLog = async ({ keterangan, nama, nominal, kategori }) => {
+export const createLog = async ({
+  keterangan,
+  nama,
+  nominal,
+  kategori,
+  idToko,
+}) => {
   // Validasi field wajib
-  if (!keterangan || !nama || !kategori) {
+  if (!keterangan || !nama || !kategori || !idToko) {
     throw new Error("Field keterangan, nama, dan tanggal wajib diisi");
   }
 
@@ -14,6 +20,7 @@ export const createLog = async ({ keterangan, nama, nominal, kategori }) => {
     data: {
       keterangan,
       nama,
+      idToko,
       kategori,
       nominal: nominal ? Number(nominal) : null, // Opsional
     },
@@ -24,18 +31,29 @@ export const createLog = async ({ keterangan, nama, nominal, kategori }) => {
 export const getAllLogs = async ({
   page = 1,
   pageSize = 10,
-  search = "", // Cari di keterangan atau nama
+  search = "",
+  kategori,
+  nama,
   startDate,
   endDate,
   minNominal,
   maxNominal,
+  idToko,
 }) => {
-  const skip = (Number(page) - 1) * Number(pageSize);
-  const take = Number(pageSize);
+  if (!idToko) {
+    throw new Error("idToko wajib diisi");
+  }
 
-  const where = {};
+  const take = Math.max(1, Math.min(Number(pageSize), 100));
+  const skip = (Math.max(1, Number(page)) - 1) * take;
 
-  // Filter pencarian (keterangan atau nama)
+  const where = {
+    idToko, // 🔥 penting untuk keamanan data
+  };
+
+  /* =========================
+     SEARCH GLOBAL (keterangan / nama)
+  ========================== */
   if (search) {
     where.OR = [
       { keterangan: { contains: search, mode: "insensitive" } },
@@ -43,14 +61,36 @@ export const getAllLogs = async ({
     ];
   }
 
-  // Filter tanggal
-  if (startDate || endDate) {
-    where.tanggal = {};
-    if (startDate) where.tanggal.gte = new Date(startDate);
-    if (endDate) where.tanggal.lte = new Date(endDate);
+  /* =========================
+     FILTER SPESIFIK
+  ========================== */
+
+  if (kategori) {
+    where.kategori = {
+      contains: kategori,
+      mode: "insensitive",
+    };
   }
 
-  // Filter nominal (hanya jika nominal tidak null)
+  if (nama) {
+    where.nama = {
+      contains: nama,
+      mode: "insensitive",
+    };
+  }
+
+  /* =========================
+     FILTER TANGGAL
+  ========================== */
+  if (startDate || endDate) {
+    where.createdAt = {};
+    if (startDate) where.createdAt.gte = new Date(startDate);
+    if (endDate) where.createdAt.lte = new Date(endDate);
+  }
+
+  /* =========================
+     FILTER NOMINAL
+  ========================== */
   if (minNominal != null || maxNominal != null) {
     where.nominal = {};
     if (minNominal != null) where.nominal.gte = Number(minNominal);
@@ -62,7 +102,7 @@ export const getAllLogs = async ({
       where,
       skip,
       take,
-      orderBy: { tanggal: "desc" }, // Terbaru dulu
+      orderBy: { createdAt: "desc" }, // 🔥 pakai createdAt (lebih konsisten)
     }),
     prisma.log.count({ where }),
   ]);

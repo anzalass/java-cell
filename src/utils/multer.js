@@ -1,20 +1,14 @@
 import multer from "multer";
-const storage = multer.memoryStorage();
 
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 1024 * 1024 }, // Batas ukuran file 1MB
+export const memoryUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (
-      file.mimetype === "image/png" ||
-      file.mimetype === "image/jpg" ||
-      file.mimetype === "image/jpeg"
-    ) {
-      cb(null, true);
-    } else {
-      cb(new Error("Unsupported file format"), false);
-    }
+    const allowed = ["image/jpeg", "image/png", "image/jpg"];
+    allowed.includes(file.mimetype)
+      ? cb(null, true)
+      : cb(new Error("Format tidak didukung"));
   },
 });
 
-export default upload;
+export default memoryUpload;

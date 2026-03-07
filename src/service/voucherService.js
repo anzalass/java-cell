@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
+import { createLog } from "./logService.js";
 
 const prisma = new PrismaClient();
 
@@ -45,6 +46,7 @@ export const createVoucher = async (data, user) => {
           nama,
           penempatan,
           brand,
+          idToko: user.toko_id,
           stok: parseInt(stok) || 0,
           hargaPokok: hargaPokok ? parseInt(hargaPokok) : null,
           hargaJual: hargaJual ? parseInt(hargaJual) : null,
@@ -53,6 +55,13 @@ export const createVoucher = async (data, user) => {
           updatedAt: new Date(`${tanggal}T00:00:00Z`),
         },
       });
+    });
+
+    await createLog({
+      kategori: "Voucher",
+      keterangan: `${user.nama} Menambahkan Voucher Baru`,
+      nama: user.nama,
+      idToko: user.toko_id,
     });
 
     return { message: "Voucher berhasil dibuat" };
@@ -65,19 +74,22 @@ export const createVoucher = async (data, user) => {
 
 // GET ALL with pagination, search, sort
 // services/voucherService.js
-export const getVouchers = async ({
-  page = 1,
-  pageSize = 10,
-  search = "",
-  brand = "all",
-  sortBy = "createdAt",
-  sortOrder = "desc",
-  penempatan = "",
-  createdStart,
-  createdEnd,
-  updatedStart,
-  updatedEnd,
-}) => {
+export const getVouchers = async (
+  {
+    page = 1,
+    pageSize = 10,
+    search = "",
+    brand = "all",
+    sortBy = "createdAt",
+    sortOrder = "desc",
+    penempatan = "",
+    createdStart,
+    createdEnd,
+    updatedStart,
+    updatedEnd,
+  },
+  user
+) => {
   try {
     const skip = (parseInt(page) - 1) * parseInt(pageSize);
     const take = parseInt(pageSize);
@@ -148,6 +160,8 @@ export const getVouchers = async ({
       ...brandFilter,
       ...penempatanFilter,
       ...(search ? searchFilter : {}),
+      idToko: user.toko_id,
+      isActive: true,
     };
 
     // ✅ Validasi field sort (aman dari inject)
@@ -239,13 +253,22 @@ export const getVoucherById = async (id) => {
 // UPDATE
 export const updateVoucher = async (id, data, user) => {
   try {
-    const { nama, brand, stok, hargaPokok, hargaJual, hargaEceran } = data;
+    const {
+      nama,
+      brand,
+      stok,
+      hargaPokok,
+      hargaJual,
+      hargaEceran,
+      penempatan,
+    } = data;
 
     await prisma.$transaction(async (tx) => {
       await tx.voucher.update({
         where: { id },
         data: {
           nama,
+          penempatan,
           brand,
           stok: stok ? parseInt(stok) : undefined,
           hargaPokok: hargaPokok ? parseInt(hargaPokok) : undefined,
@@ -253,6 +276,13 @@ export const updateVoucher = async (id, data, user) => {
           hargaEceran: hargaEceran ? parseInt(hargaEceran) : null,
         },
       });
+    });
+
+    await createLog({
+      kategori: "Voucher",
+      keterangan: `${user.nama} Mengupdate Voucher menjadi ${nama}  `,
+      nama: user.nama,
+      idToko: user.toko_id,
     });
 
     return { message: "Voucher berhasil diupdate" };
@@ -266,10 +296,21 @@ export const updateVoucher = async (id, data, user) => {
 // DELETE
 export const deleteVoucher = async (id, user) => {
   try {
+    let vd;
     await prisma.$transaction(async (tx) => {
-      await tx.voucher.delete({
+      vd = await tx.voucher.update({
         where: { id },
+        data: {
+          isActive: false,
+        },
       });
+    });
+
+    await createLog({
+      kategori: "Aksesoris",
+      keterangan: `Menghapus Voucher ${vd.nama}  `,
+      nama: user.nama,
+      idToko: user.toko_id,
     });
     return { message: "Voucher berhasil dihapus" };
   } catch (error) {
@@ -320,6 +361,13 @@ export const updateStokVoucher = async (id, { tipe, stok }, user) => {
       });
 
       // Log aktivitas
+
+      await createLog({
+        kategori: "Voucher",
+        keterangan: ` Stok Voucher ${updatedStok.nama} telah di ${tipe} ${stok} pcs `,
+        nama: user.nama,
+        idToko: user.toko_id,
+      });
     });
 
     return {
@@ -333,9 +381,17 @@ export const updateStokVoucher = async (id, { tipe, stok }, user) => {
   }
 };
 
-export const voucherMaster = async () => {
+export const voucherMaster = async (user) => {
   try {
-    return await prisma.voucher.findMany({});
+    return await prisma.voucher.findMany({
+      where: {
+        idToko: user.toko_id,
+        isActive: true,
+      },
+      orderBy: {
+        hargaEceran: "asc",
+      },
+    });
   } catch (error) {
     console.log(error);
     const errorMessage = prismaErrorHandler(error);

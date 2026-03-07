@@ -14,11 +14,14 @@ export const getAllUsers = async ({
   search = "",
   role,
   penempatan,
+  idToko,
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
 
   const where = {};
+
+  where.idToko = idToko;
 
   // Filter pencarian (nama atau email)
   if (search) {
@@ -173,6 +176,10 @@ export const login = async (auth) => {
   const { email, password } = auth;
 
   try {
+    if (!process.env.JWT_SECRET_KEY) {
+      throw new Error("JWT secret belum diset");
+    }
+
     const user = await prisma.user.findUnique({
       where: { email },
     });
@@ -187,30 +194,50 @@ export const login = async (auth) => {
       throw new Error("NIP atau password salah");
     }
 
+    const toko = await prisma.toko.findUnique({
+      where: { id: user.idToko },
+    });
+
+    if (!toko) {
+      throw new Error("Data toko tidak ditemukan");
+    }
+
+    if (!toko.SubscribeTime) {
+      throw new Error("Toko belum memiliki masa langganan");
+    }
+
+    if (new Date(toko.SubscribeTime) < new Date()) {
+      throw new Error("Silahkan Perpanjang Langganan");
+    }
+
+    if (!toko.isActive) {
+      throw new Error("Toko Tidak Aktif Silahkan Hubungi CS 0859102604165");
+    }
+
     const token = jwt.sign(
       {
         id: user.id,
         nama: user.nama,
         role: user.role,
         penempatan: user.penempatan,
+        toko_id: toko.id,
       },
       process.env.JWT_SECRET_KEY,
-      { expiresIn: "3d" } // token berlaku 5 menit
+      { expiresIn: "3d" }
     );
-
-    const decoded = jwt.decode(token);
 
     return {
       token,
-      expiresIn: decoded.exp,
-      id: decoded.id,
-      nama: decoded.nama,
-      role: decoded.role,
-      penempatan: decoded.penempatan,
+      id: user.id,
+      nama: user.nama,
+      role: user.role,
+      penempatan: user.penempatan,
+      toko_id: toko.id,
     };
   } catch (error) {
-    console.log(error);
-    const errorMessage = prismaErrorHandler(error);
-    throw new Error(errorMessage);
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(prismaErrorHandler(error));
   }
 };

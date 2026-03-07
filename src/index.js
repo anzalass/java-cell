@@ -44,6 +44,8 @@ import transaksiVoucher from "./routes/transaksiVoucherRoutes.js";
 import jualanHarian from "./routes/jualanRoutes.js";
 import memberRoutes from "./routes/memberRoutes.js";
 import voucherHarian from "./routes/jualanVoucherRoutes.js";
+import superAdminRoutes from "./routes/superAdminRoutes.js";
+import logRoutes from "./routes/logRoutes.js";
 
 app.use("/api/v1", authRoutes);
 app.use("/api/v1", aksesorisRoutes);
@@ -52,6 +54,8 @@ app.use("/api/v1", downlineRoutes);
 app.use("/api/v1", serviceRoutes);
 app.use("/api/v1", sparepartRoutes);
 app.use("/api/v1", uangModalRoutes);
+app.use("/api/v1", superAdminRoutes);
+
 app.use("/api/v1", pageRoutes);
 
 app.use("/api/v1", transaksiVoucher);
@@ -60,6 +64,7 @@ app.use("/api/v1", transaksiSparepart);
 app.use("/api/v1", jualanHarian);
 app.use("/api/v1", memberRoutes);
 app.use("/api/v1", voucherHarian);
+app.use("/api/v1", logRoutes);
 
 app.use(errorHandler);
 

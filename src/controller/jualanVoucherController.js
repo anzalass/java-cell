@@ -10,14 +10,7 @@ import {
 // POST /api/transaksi-voucher
 export const createTransaksi = async (req, res) => {
   try {
-    const { idVoucher } = req.params;
-    if (!idVoucher) {
-      return res.status(400).json({
-        success: false,
-        message: "idVoucher wajib diisi",
-      });
-    }
-    await createJualan(idVoucher);
+    await createJualan(req.body, req.user);
     res.status(201).json({
       success: true,
       message: "Transaksi berhasil dibuat",
@@ -34,14 +27,14 @@ export const createTransaksi = async (req, res) => {
 export const deleteTransaksi = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await deleteTransaksiVoucher(id);
-    res.json({
+    const result = await deleteTransaksiVoucher(id, req.user);
+    return res.status(200).json({
       success: true,
       message: result.message,
       data: { restoredStok: result.restoredStok },
     });
   } catch (error) {
-    res.status(400).json({
+    return res.status(400).json({
       success: false,
       message: error.message,
     });
@@ -51,16 +44,20 @@ export const deleteTransaksi = async (req, res) => {
 // GET /api/transaksi-voucher/harian
 export const getTransaksiHarian = async (req, res) => {
   try {
-    const data = await getJualanVoucherHarian();
-    res.json({ success: true, data });
+    const { deletedFilter = "active" } = req.query;
+
+    const data = await getJualanVoucherHarian(req.user, {
+      deletedFilter,
+    });
+
+    return res.json({ success: true, data });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
-
 // GET /api/transaksi-voucher
 export const getAllTransaksi = async (req, res) => {
   try {
@@ -72,6 +69,7 @@ export const getAllTransaksi = async (req, res) => {
       endDate,
       search,
       brand,
+      deletedFilter = "active", // 🔥 tambahan
     } = req.query;
 
     const data = await getAllTransaksiVoucher({
@@ -82,17 +80,18 @@ export const getAllTransaksi = async (req, res) => {
       endDate,
       search,
       brand,
+      deletedFilter,
+      idToko: req.user.toko_id,
     });
 
-    res.json({ success: true, data });
+    return res.json({ success: true, data });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
-
 // GET /api/laporan/voucher-terlaris
 export const getVoucherTerlaris = async (req, res) => {
   try {
@@ -113,6 +112,7 @@ export const getVoucherTerlaris = async (req, res) => {
       brand,
       page,
       pageSize,
+      idToko: req.user.toko_id,
     });
     res.json({ success: true, data });
   } catch (error) {

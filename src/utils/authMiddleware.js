@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import { logoutHandler } from "../controller/authController.js";
 dotenv.config();
 
 export const AuthMiddleware = async (req, res, next) => {
@@ -43,6 +44,7 @@ export const AuthMiddleware2 = async (req, res, next) => {
       nama: decoded.nama,
       penempatan: decoded.penempatan,
       id: decoded.id,
+      // toko_id: decoded.toko_id,
     };
 
     console.log(data);
@@ -50,7 +52,6 @@ export const AuthMiddleware2 = async (req, res, next) => {
     return res.status(200).json(data); // atau sesuaikan format
   } catch (err) {
     if (err.name === "TokenExpiredError") {
-      logoutHandler(req, res);
       return res.status(401).json({
         message: "Token expired",
         success: false,
@@ -60,3 +61,41 @@ export const AuthMiddleware2 = async (req, res, next) => {
     return res.status(401).json({ message: "Invalid token", success: false });
   }
 };
+
+export const isSuperAdmin = (req, res, next) => {
+  if (req.user?.role === "Super Admin") {
+    return next();
+  }
+  return res
+    .status(403)
+    .json({ message: "Access denied. Only Guru TU allowed." });
+};
+
+export const isOwner = (req, res, next) => {
+  if (req.user?.role === "Owner") {
+    return next();
+  }
+  return res
+    .status(403)
+    .json({ message: "Access denied. Only Guru TU allowed." });
+};
+
+export const isCrew = (req, res, next) => {
+  if (req.user?.role === "Crew") {
+    return next();
+  }
+  return res
+    .status(403)
+    .json({ message: "Access denied. Only Guru TU allowed." });
+};
+
+export const hasRole =
+  (...roles) =>
+  (req, res, next) => {
+    if (roles.includes(req.user?.role)) {
+      return next();
+    }
+    return res
+      .status(403)
+      .json({ message: "Access denied. Unauthorized role." });
+  };

@@ -1,6 +1,7 @@
 // src/services/serviceHP.service.js
 import { PrismaClient } from "@prisma/client";
 import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
+import { createLog } from "./logService.js";
 
 const prisma = new PrismaClient();
 
@@ -8,7 +9,7 @@ const prisma = new PrismaClient();
  * Buat transaksi service HP
  * @param {Object} data - { brandHP, keterangan, status, biayaJasa, sparePart }
  */
-export const createServiceHP = async (data) => {
+export const createServiceHP = async (data, user) => {
   const {
     brandHP,
     keterangan,
@@ -20,6 +21,7 @@ export const createServiceHP = async (data) => {
     noHP,
     penempatan,
     namaPelanggan,
+    idToko,
   } = data;
 
   // Validasi wajib
@@ -53,7 +55,7 @@ export const createServiceHP = async (data) => {
 
       // Ambil data sparepart
       const sparepart = await tx.sparePart.findUnique({
-        where: { id: idSparepart },
+        where: { id: idSparepart, idToko: idToko },
         select: {
           id: true,
           nama: true,
@@ -84,74 +86,65 @@ export const createServiceHP = async (data) => {
         quantity,
       });
     }
-    let memberId;
-
-    if (idMember) {
-      memberId = await tx.member.findUnique({
-        where: {
-          id: idMember,
-        },
-        select: {
-          id: true,
-        },
-      });
-    }
 
     // Hitung total keuntungan (jasa + sparepart)
     const totalKeuntungan = totalKeuntunganSparepart + Number(biayaJasa);
 
-    // Buat transaksi service HP
+    const today = new Date();
+    const tanggal = today.toISOString().split("T")[0];
+
     const service = await tx.serviceHP.create({
       data: {
         brandHP,
         keterangan,
         tanggal: new Date(),
         noHP,
-        penempatan,
-        idMember,
-        idUser,
+        Toko: {
+          connect: { id: user.toko_id },
+        },
         namaPelangan: namaPelanggan ? namaPelanggan : namaRandom,
         status,
         hargaSparePart: totalHargaSparepart || null,
         biayaJasa: Number(biayaJasa),
         keuntungan: totalKeuntungan,
+
+        ...(idMember && {
+          Member: {
+            connect: { id: idMember },
+          },
+        }),
+
+        Sparepart: {
+          create: sparepartItems.map((item) => ({
+            Sparepart: {
+              connect: { id: item.idSparepart },
+            },
+
+            quantity: item.quantity,
+            tanggal: new Date(`${tanggal}T00:00:00Z`),
+            Toko: {
+              connect: { id: user.toko_id },
+            },
+          })),
+        },
       },
     });
 
-    const today = new Date();
-    const tanggal = today.toISOString().split("T")[0];
-
-    // Kurangi stok & buat relasi sparepart
     for (const item of sparepartItems) {
-      // Kurangi stok
       await tx.sparePart.update({
         where: { id: item.idSparepart },
-        data: { stok: { decrement: item.quantity } },
-      });
-
-      // Buat relasi
-      await tx.sparepartServiceHP.create({
         data: {
-          idServiceHP: service.id,
-          idSparepart: item.idSparepart,
-          quantity: item.quantity,
-          tanggal: new Date(`${tanggal}T00:00:00Z`),
+          stok: { decrement: item.quantity },
         },
       });
     }
-
-    if (memberId) {
-      await tx.member.update({
-        where: {
-          id: idMember, // pastikan `noTelp` unique!
-        },
-        data: {
-          totalTransaksi: {
-            increment: totalKeuntungan, // ✅ Tambahkan nilai ini
-          },
-        },
-      });
-    }
+    await createLog({
+      kategori: "Service HP",
+      keterangan: `${user.nama} telah menambah Service HP`,
+      nominal: service.keuntungan,
+      nama: user.nama,
+      idToko: user.toko_id,
+    });
 
     return {
       id: service.id,
@@ -166,7 +159,7 @@ export const createServiceHP = async (data) => {
 };
 
 // ✅ UPDATE STATUS
-export const updateServiceHPStatus = async (id, status) => {
+export const updateServiceHPStatus = async (id, status, user) => {
   const allowedStatus = ["Pending", "Selesai", "Proses", "Gagal", "Batal"];
   if (!allowedStatus.includes(status)) {
     throw new Error("Status tidak valid");
@@ -175,20 +168,30 @@ export const updateServiceHPStatus = async (id, status) => {
   // Cek apakah service ada
   const service = await prisma.serviceHP.findUnique({
     where: { id },
-    select: { id: true },
+    select: {
+      id: true,
+      keterangan: true,
+    },
   });
   if (!service) {
     throw new Error("Service tidak ditemukan");
   }
 
-  return await prisma.serviceHP.update({
+  await prisma.serviceHP.update({
     where: { id },
     data: { status },
+  });
+
+  await createLog({
+    kategori: "Service HP",
+    keterangan: `${user.nama} telah mengupdate status Service HP ${service.keterangan}`,
+    nama: user.nama,
+    idToko: user.toko_id,
   });
 };
 
 // ✅ DELETE SERVICE (rollback stok)
-export const deleteServiceHP = async (id) => {
+export const deleteServiceHP = async (id, user) => {
   return await prisma.$transaction(async (tx) => {
     // Cari service beserta sparepart-nya
     const service = await tx.serviceHP.findUnique({
@@ -215,15 +218,30 @@ export const deleteServiceHP = async (id) => {
         data: { stok: { increment: item.quantity } },
       });
     }
-
+    const now = new Date();
+    const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
     // Hapus relasi sparepart
-    await tx.sparepartServiceHP.deleteMany({
+    await tx.sparepartServiceHP.updateMany({
       where: { idServiceHP: id },
+      data: {
+        deletedAt: wib,
+      },
     });
 
     // Hapus service utama
-    await tx.serviceHP.delete({
+    await tx.serviceHP.update({
       where: { id },
+      data: {
+        deletedAt: wib,
+      },
+    });
+
+    await createLog({
+      kategori: "Service HP",
+      keterangan: `${user.nama} telah menghapus Service HP ${service.keterangan}`,
+      nominal: service.keuntungan,
+      nama: user.nama,
+      idToko: user.toko_id,
     });
 
     return { success: true };
@@ -238,12 +256,19 @@ export const getAllServiceHP = async ({
   status,
   startDate,
   endDate,
+  idToko,
+  deletedFilter = "active", // ✅ tambahan
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
 
   const where = {};
-
+  where.idToko = idToko;
+  if (deletedFilter === "active") {
+    where.deletedAt = null;
+  } else if (deletedFilter === "deleted") {
+    where.deletedAt = { not: null };
+  }
   // Filter pencarian (namaPembeli = brandHP di model)
   if (search) {
     where.brandHP = { contains: search, mode: "insensitive" };
@@ -298,13 +323,14 @@ export const getAllServiceHP = async ({
 
     return {
       id: svc.id,
-      namaPembeli: svc.brandHP, // frontend: namaPembeli = brandHP
+      namaPembeli: svc.namaPelangan, // frontend: namaPembeli = brandHP
       keterangan: svc.keterangan,
       brandHP: svc.brandHP,
       biayaJasa: svc.biayaJasa,
-      tanggal: svc.tanggal.toISOString().split("T")[0],
+      tanggal: svc.createdAt,
       status: svc.status,
       member: svc.Member,
+      noHP: svc.noHP,
       keuntungan: totalKeuntungan,
       detail: {
         itemTransaksi: svc.Sparepart.map((item) => ({

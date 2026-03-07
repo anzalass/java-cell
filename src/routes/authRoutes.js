@@ -17,10 +17,10 @@ const router = Router();
 router.get("/auth", AuthMiddleware, getAllUsersHandler);
 
 // GET user by ID
-router.get("/auth:id", AuthMiddleware, getUserByIdHandler);
+router.get("/auth/:id", AuthMiddleware, getUserByIdHandler);
 
 // CREATE user
-router.post("/auth", createUserHandler);
+router.post("/auth", AuthMiddleware, createUserHandler);
 
 // UPDATE user
 router.put("/auth/:id", AuthMiddleware, updateUserHandler);

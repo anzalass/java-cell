@@ -3,10 +3,6 @@ import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
 import { createLog } from "./logService.js";
 const prisma = new PrismaClient();
 
-// CREATE
-// src/services/downline.service.js
-
-// GET ALL with filter & pagination
 export const getAllDownlines = async ({
   page = 1,
   pageSize = 10,
@@ -14,12 +10,14 @@ export const getAllDownlines = async ({
   createdAt,
   sortBy = "createdAt",
   sortOrder = "desc",
+  idToko,
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
 
   // Build WHERE
   const where = {};
+  where.idToko = idToko;
 
   if (search) {
     where.OR = [
@@ -84,6 +82,7 @@ export const createDownline = async (data, user) => {
       noHp,
       nama,
       createdAt: new Date(),
+      idToko: user.toko_id,
     },
   });
 
@@ -91,6 +90,7 @@ export const createDownline = async (data, user) => {
     kategori: "Downline",
     keterangan: `Menambah downline baru ${downline.nama}  `,
     nama: user.nama,
+    idToko: user.toko_id,
   });
 };
 
@@ -124,6 +124,7 @@ export const updateDownline = async (id, data, user) => {
     kategori: "Downline",
     keterangan: `Mengubah downline ${oldDownline.nama} - ${downline.nama}  `,
     nama: user.nama,
+    idToko: user.toko_id,
   });
 };
 
@@ -139,18 +140,29 @@ export const deleteDownline = async (id, user) => {
     throw new Error("Downline tidak ditemukan");
   }
   // Opsional: cek relasi transaksiVoucherDownline jika perlu
-  await prisma.downline.delete({ where: { id } });
+  await prisma.downline.update({
+    where: { id },
+    data: {
+      isActive: false,
+    },
+  });
 
   await createLog({
     kategori: "Downline",
     keterangan: `Menghapus downline ${oldDownline.nama} `,
     nama: user.nama,
+    idToko: user.toko_id,
   });
 };
 
-export const masterDownlines = async () => {
+export const masterDownlines = async (user) => {
   try {
-    return await prisma.downline.findMany({});
+    return await prisma.downline.findMany({
+      where: {
+        idToko: user.toko_id,
+        isActive: true,
+      },
+    });
   } catch (error) {
     console.log(error);
   }

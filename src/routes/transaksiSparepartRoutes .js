@@ -4,6 +4,7 @@ import express from "express";
 import {
   createTransaksiSparepartHandler,
   deleteTransaksiSparepartHandler,
+  detailTransaksiSparepartController,
   getAllTransaksiSparepartHandler,
   getLaporanBarangKeluarHandler,
 } from "../controller/transaksiSparepartController.js";
@@ -16,6 +17,12 @@ router.post(
   AuthMiddleware,
   createTransaksiSparepartHandler
 ); // POST transaksi
+
+router.get(
+  "/print-transaksi-sparepart/:id",
+  AuthMiddleware,
+  detailTransaksiSparepartController
+);
 
 router.get(
   "/transaksi-sparepart",

@@ -21,7 +21,7 @@ router.patch(
 );
 
 router.get("/service-hp", AuthMiddleware, getAllServiceHPHandler);
-router.get("/service-hp-print/:id", getDetailService);
+router.get("/service-hp-print/:id", AuthMiddleware, getDetailService);
 
 // DELETE /api/service-hp/:id      → Hapus service
 router.delete("/service-hp/:id", AuthMiddleware, deleteServiceHPHandler);

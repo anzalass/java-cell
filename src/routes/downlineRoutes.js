@@ -13,7 +13,7 @@ import { AuthMiddleware } from "../utils/authMiddleware.js";
 const router = Router();
 
 router.get("/downline", AuthMiddleware, getAllDownlinesHandler);
-router.get("/downline-master", getDownlineMaster);
+router.get("/downline-master", AuthMiddleware, getDownlineMaster);
 
 router.post("/downline", AuthMiddleware, createDownlineHandler);
 router.get("/downline/:id", AuthMiddleware, getDownlineHandler);

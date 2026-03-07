@@ -12,7 +12,21 @@ import {
 
 export const getAllAccHandler = async (req, res) => {
   try {
-    const result = await getAllAcc(req.query);
+    const result = await getAllAcc({
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+      search: req.query.search,
+      penempatan: req.query.penempatan,
+      brand: req.query.brand,
+      filterBarcode: req.query.filterBarcode, // "all", "with", "without"
+      createdStart: req.query.createdStart,
+      createdEnd: req.query.createdEnd,
+      updatedStart: req.query.updatedStart,
+      updatedEnd: req.query.updatedEnd, // frontend kirim "updatedAt", kita map ke "updateAt"
+      sortBy: req.query.sortBy,
+      sortOrder: req.query.sortOrder,
+      idToko: req.user.toko_id,
+    });
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -98,7 +112,7 @@ export const updateStokAccHandler = async (req, res) => {
 
 export const getAccMaster = async (req, res) => {
   try {
-    const data = await aksesorisMaster();
+    const data = await aksesorisMaster(req.user);
     return res.status(200).json(data);
   } catch (error) {
     console.error(error);

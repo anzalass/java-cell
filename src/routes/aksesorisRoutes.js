@@ -19,6 +19,6 @@ router.get("/acc/:id", AuthMiddleware, getAccHandler); // ✅ GET one
 router.put("/acc/:id", AuthMiddleware, updateAccHandler); // ✅ UPDATE
 router.delete("/acc/:id", AuthMiddleware, deleteAccHandler); // ✅ DELETE
 router.patch("/acc/:id/stok", AuthMiddleware, updateStokAccHandler); // ✅ DELETE
-router.get("/acc-master", getAccMaster);
+router.get("/acc-master", AuthMiddleware, getAccMaster);
 
 export default router;

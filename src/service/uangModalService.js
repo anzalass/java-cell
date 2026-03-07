@@ -1,5 +1,6 @@
 // src/services/uangModal.service.js
 import { PrismaClient } from "@prisma/client";
+import { createLog } from "./logService.js";
 
 const prisma = new PrismaClient();
 
@@ -10,11 +11,13 @@ export const getAllUangModal = async ({
   search = "",
   startDate,
   endDate,
+  user,
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
 
   const where = {};
+  where.idToko = user.toko_id;
 
   // Filter pencarian
   if (search) {
@@ -51,9 +54,10 @@ export const getAllUangModal = async ({
 
 // ✅ CREATE
 export const createUangModal = async (data) => {
-  const { keterangan, tanggal, jumlah, penempatan, idUser } = data;
+  const { keterangan, tanggal, jumlah, penempatan, idUser, idToko, user } =
+    data;
 
-  if (!keterangan || !tanggal || jumlah == null) {
+  if (!keterangan || !tanggal || jumlah == null || !idToko) {
     throw new Error("Semua field wajib diisi");
   }
 
@@ -62,19 +66,26 @@ export const createUangModal = async (data) => {
     throw new Error("Jumlah harus lebih dari 0");
   }
 
-  return await prisma.uangModal.create({
+  await prisma.uangModal.create({
     data: {
-      idUser: idUser,
       keterangan,
-      penempatan: penempatan,
+      idToko: idToko,
       tanggal: new Date(tanggal),
       jumlah: Number(jumlah),
     },
   });
+
+  await createLog({
+    kategori: "Uang Keluar",
+    keterangan: `${user.nama} Menambahkan Catatan ${keterangan} Uang Keluar`,
+    nominal: jumlah,
+    nama: user.nama,
+    idToko: user.toko_id,
+  });
 };
 
 // ✅ UPDATE
-export const updateUangModal = async (id, data) => {
+export const updateUangModal = async (id, data, user) => {
   const { keterangan, tanggal, jumlah } = data;
 
   if (!keterangan || !tanggal || jumlah == null) {
@@ -90,7 +101,7 @@ export const updateUangModal = async (id, data) => {
     throw new Error("Data uang modal tidak ditemukan");
   }
 
-  return await prisma.uangModal.update({
+  await prisma.uangModal.update({
     where: { id },
     data: {
       keterangan,
@@ -98,15 +109,32 @@ export const updateUangModal = async (id, data) => {
       jumlah: Number(jumlah),
     },
   });
+
+  await createLog({
+    kategori: "Uang Keluar",
+    keterangan: `${user.nama} Mengupdate Catatan ${keterangan} Uang Keluar`,
+    nominal: jumlah,
+    nama: user.nama,
+    idToko: user.toko_id,
+  });
 };
 
 // ✅ DELETE
-export const deleteUangModal = async (id) => {
+export const deleteUangModal = async (id, user) => {
   const existing = await prisma.uangModal.findUnique({ where: { id } });
   if (!existing) {
     throw new Error("Data uang modal tidak ditemukan");
   }
 
+  await createLog({
+    kategori: "Uang Keluar",
+    keterangan: `${user.nama} Menghapus Catatan ${existing.keterangan} Uang Keluar`,
+    nominal: existing.jumlah,
+    nama: user.nama,
+    idToko: user.toko_id,
+  });
+
   await prisma.uangModal.delete({ where: { id } });
+
   return { success: true };
 };

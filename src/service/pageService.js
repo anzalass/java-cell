@@ -3,7 +3,7 @@ import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
 import { getJualanVoucherHarian } from "./jualanVoucherService.js";
 const prisma = new PrismaClient();
 
-export const dashboardPageService = async () => {
+export const dashboardPageService = async (user) => {
   try {
     // Hitung awal dan akhir hari ini
     const now = new Date();
@@ -17,30 +17,34 @@ export const dashboardPageService = async () => {
 
     // ================== Transaksi Voucher ==================
     const transaksiVoucherToday = await prisma.transaksiVoucherDownline.count({
-      where: { tanggal: todayFilter },
+      where: { tanggal: todayFilter, idToko: user?.toko_id },
     });
 
     const { _sum: voucherSum } =
       await prisma.transaksiVoucherDownline.aggregate({
         _sum: { totalHarga: true },
-        where: { tanggal: todayFilter, status: "Selesai" },
+        where: {
+          tanggal: todayFilter,
+          status: "Selesai",
+          idToko: user?.toko_id,
+        },
       });
     const totalPendapatanVoucherHariIni = voucherSum.totalHarga || 0;
 
     // ================== Transaksi Sparepart ==================
     const transaksiSparepartToday = await prisma.transaksiSparepat.count({
-      where: { tanggal: todayFilter },
+      where: { tanggal: todayFilter, idToko: user?.toko_id },
     });
 
     const { _sum: SparepartSum } = await prisma.transaksiSparepat.aggregate({
       _sum: { totalHarga: true },
-      where: { tanggal: todayFilter },
+      where: { tanggal: todayFilter, idToko: user?.toko_id },
     });
     const totalPendapatanSparepartHariIni = SparepartSum.totalHarga || 0;
 
     // ================== Transaksi Aksesoris ==================
     const transaksiAksesorisToday = await prisma.transaksiAksesoris.count({
-      where: { tanggal: todayFilter },
+      where: { tanggal: todayFilter, idToko: user?.toko_id },
     });
 
     const { _sum: aksesorisSum } = await prisma.transaksiAksesoris.aggregate({
@@ -51,52 +55,56 @@ export const dashboardPageService = async () => {
 
     // ================== Service HP ==================
     const serviceHpToday = await prisma.serviceHP.count({
-      where: { tanggal: todayFilter },
+      where: { tanggal: todayFilter, idToko: user?.toko_id },
     });
 
     const { _sum: serviceSum } = await prisma.serviceHP.aggregate({
       _sum: { biayaJasa: true },
-      where: { tanggal: todayFilter },
+      where: { tanggal: todayFilter, idToko: user?.toko_id },
     });
     const totalPendapatanServiceHariIni = serviceSum.biayaJasa || 0;
 
     // ================== Uang Modal ==================
     const { _sum: modalSum } = await prisma.uangModal.aggregate({
       _sum: { jumlah: true },
-      where: { tanggal: todayFilter },
+      where: { tanggal: todayFilter, idToko: user?.toko_id },
     });
     const totalUangModalHariIni = modalSum.jumlah || 0;
 
     // ================== Pending Voucher ==================
     const pendingVoucher = await prisma.transaksiVoucherDownline.count({
-      where: { status: "Pending" },
+      where: { status: "Pending", idToko: user?.toko_id },
     });
 
     // ================== Tabel Transaksi Hari Ini ==================
     const tableTransaksiVoucherToday =
       await prisma.transaksiVoucherDownline.findMany({
-        where: { tanggal: todayFilter },
+        where: { tanggal: todayFilter, idToko: user?.toko_id },
       });
 
     const tableTransaksiAksesorisToday =
       await prisma.transaksiAksesoris.findMany({
-        where: { tanggal: todayFilter },
+        where: { tanggal: todayFilter, idToko: user?.toko_id },
       });
 
     const tableTransaksiSparepartToday =
       await prisma.transaksiSparepat.findMany({
-        where: { tanggal: todayFilter },
+        where: { tanggal: todayFilter, idToko: user?.toko_id },
       });
 
     const tableUangModalToday = await prisma.uangModal.findMany({
-      where: { tanggal: todayFilter },
+      where: { tanggal: todayFilter, idToko: user?.toko_id },
     });
 
     const tableServiceHPToday = await prisma.serviceHP.findMany({
-      where: { tanggal: todayFilter },
+      where: { tanggal: todayFilter, idToko: user?.toko_id },
     });
 
-    const tableLogs = await prisma.log.findMany();
+    const tableLogs = await prisma.log.findMany({
+      where: {
+        idToko: user?.toko_id,
+      },
+    });
 
     // ================== Aksesoris Terlaris by Brand ==================
     const aksesorisItems = await prisma.itemsTransaksiAksesoris.findMany({
@@ -377,6 +385,8 @@ export const dashboardPageService2 = async (
   } = {}
 ) => {
   try {
+    console.log(user);
+
     const now = new Date();
     const startOfToday = new Date(
       now.getFullYear(),
@@ -390,6 +400,8 @@ export const dashboardPageService2 = async (
         gte: startOfToday,
         lt: endOfToday,
       },
+      idToko: user?.toko_id,
+      deletedAt: null,
     };
 
     // === AGREGAT & COUNT (ringan, tidak perlu paginate) ===
@@ -418,12 +430,7 @@ export const dashboardPageService2 = async (
         where: todayFilter,
       }),
       prisma.jualanHarian.count({
-        where: {
-          createdAt: {
-            gte: startOfToday,
-            lt: endOfToday,
-          },
-        },
+        where: todayFilter,
       }),
 
       //================
@@ -435,6 +442,8 @@ export const dashboardPageService2 = async (
             lt: endOfToday,
           },
           status: "Selesai",
+          idToko: user?.toko_id,
+          deletedAt: null,
         },
       }),
       prisma.transaksiVoucherDownline.aggregate({
@@ -445,10 +454,20 @@ export const dashboardPageService2 = async (
             lt: endOfToday,
           },
           status: "Selesai",
+          idToko: user?.toko_id,
+          deletedAt: null,
         },
       }),
       prisma.transaksiVoucherDownline.count({
-        where: todayFilter,
+        where: {
+          createdAt: {
+            gte: startOfToday,
+            lt: endOfToday,
+          },
+          status: "Selesai",
+          idToko: user?.toko_id,
+          deletedAt: null,
+        },
       }),
 
       prisma.transaksiVoucherDownline.count({
@@ -458,6 +477,8 @@ export const dashboardPageService2 = async (
             lt: endOfToday,
           },
           status: "Pending",
+          idToko: user?.toko_id,
+          deletedAt: null,
         },
       }),
       prisma.transaksiAksesoris.aggregate({
@@ -483,7 +504,14 @@ export const dashboardPageService2 = async (
           hargaSparePart: true,
           biayaJasa: true,
         },
-        where: todayFilter,
+        where: {
+          createdAt: {
+            gte: startOfToday,
+            lt: endOfToday,
+          },
+          status: "Selesai",
+          deletedAt: null,
+        },
       }),
       prisma.serviceHP.aggregate({
         _sum: { keuntungan: true },
@@ -493,12 +521,19 @@ export const dashboardPageService2 = async (
             lt: endOfToday,
           },
           status: "Selesai",
+          deletedAt: null,
         },
       }),
       prisma.serviceHP.count({ where: todayFilter }),
       prisma.uangModal.aggregate({
         _sum: { jumlah: true },
-        where: todayFilter,
+        where: {
+          createdAt: {
+            gte: startOfToday,
+            lt: endOfToday,
+          },
+          idToko: user?.toko_id,
+        },
       }),
     ]);
 
@@ -515,7 +550,15 @@ export const dashboardPageService2 = async (
     ] = await prisma.$transaction([
       // Voucher
       prisma.transaksiVoucherDownline.findMany({
-        where: todayFilter,
+        where: {
+          createdAt: {
+            gte: startOfToday,
+            lt: endOfToday,
+          },
+          idToko: user?.toko_id,
+          deletedAt: null,
+          status: "Selesai",
+        },
         select: {
           id: true,
           downline: {
@@ -526,7 +569,6 @@ export const dashboardPageService2 = async (
           },
           tanggal: true,
           keuntungan: true,
-          penempatan: true,
           status: true,
           items: {
             select: {
@@ -554,7 +596,6 @@ export const dashboardPageService2 = async (
           id: true,
           tanggal: true,
           totalHarga: true,
-          penempatan: true,
           items: {
             select: {
               Aksesoris: {
@@ -581,7 +622,6 @@ export const dashboardPageService2 = async (
           namaPelangan: true,
           noHP: true,
           biayaJasa: true,
-          penempatan: true,
           tanggal: true,
           status: true,
           Member: {
@@ -614,7 +654,6 @@ export const dashboardPageService2 = async (
           id: true,
           idMember: true,
           keuntungan: true,
-          penempatan: true,
           tanggal: true,
           totalHarga: true,
           items: {
@@ -634,7 +673,13 @@ export const dashboardPageService2 = async (
         orderBy: { createdAt: "desc" },
       }),
       prisma.uangModal.findMany({
-        where: todayFilter,
+        where: {
+          createdAt: {
+            gte: startOfToday,
+            lt: endOfToday,
+          },
+          idToko: user?.toko_id,
+        },
         orderBy: { createdAt: "desc" },
       }),
       // Stok Aksesoris
@@ -662,7 +707,7 @@ export const dashboardPageService2 = async (
 
     // === TOTAL COUNT untuk pagination ===
 
-    const voucherHarian = await getJualanVoucherHarian();
+    const voucherHarian = await getJualanVoucherHarian(user);
 
     return {
       // === AGREGAT ===
@@ -708,7 +753,7 @@ export const dashboardPageService2 = async (
   }
 };
 
-export const cariSparepart = async (keyword = "") => {
+export const cariSparepart = async (keyword = "", user) => {
   try {
     const keywords = keyword.split(" ").filter(Boolean);
 
@@ -720,6 +765,7 @@ export const cariSparepart = async (keyword = "") => {
             mode: "insensitive",
           },
         })),
+        idToko: user?.toko_id,
       },
       orderBy: {
         nama: "asc",
@@ -732,7 +778,7 @@ export const cariSparepart = async (keyword = "") => {
   }
 };
 
-export const cariVoucher = async (keyword = "") => {
+export const cariVoucher = async (keyword = "", user) => {
   try {
     const keywords = keyword.split(" ").filter(Boolean);
 
@@ -744,6 +790,7 @@ export const cariVoucher = async (keyword = "") => {
             mode: "insensitive",
           },
         })),
+        idToko: user?.toko_id,
       },
       orderBy: {
         nama: "asc",
@@ -756,7 +803,7 @@ export const cariVoucher = async (keyword = "") => {
   }
 };
 
-export const cariAksesoris = async (keyword = "") => {
+export const cariAksesoris = async (keyword = "", user) => {
   try {
     const keywords = keyword.split(" ").filter(Boolean);
 
@@ -768,6 +815,7 @@ export const cariAksesoris = async (keyword = "") => {
             mode: "insensitive",
           },
         })),
+        idToko: user?.toko_id,
       },
       orderBy: {
         nama: "asc",
