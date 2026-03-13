@@ -79,7 +79,9 @@ export const createServiceHP = async (data, user) => {
           status,
           tanggal: new Date(),
           noHP,
-          idToko: user.toko_id,
+          Toko: {
+            connect: { id: user.toko_id },
+          },
           namaPelangan: namaPelanggan || generateRandomCode(),
           biayaJasa: Number(biayaJasa),
           hargaSparePart: totalHargaSparepart,
@@ -97,7 +99,9 @@ export const createServiceHP = async (data, user) => {
                 connect: { id: item.idSparepart },
               },
               quantity: item.quantity,
-              idToko: user.toko_id,
+              Toko: {
+                connect: { id: user.toko_id },
+              },
             })),
           },
         },

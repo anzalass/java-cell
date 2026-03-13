@@ -159,7 +159,6 @@ export const createKejadianTakTerduga = async ({
   keterangan,
   nominal,
   no_transaksi,
-  penempatan,
   user,
   idToko,
 }) => {
@@ -170,7 +169,6 @@ export const createKejadianTakTerduga = async ({
   await prisma.kejadianTakTerduga.create({
     data: {
       keterangan,
-      penempatan,
       nominal: Number(nominal),
       no_transaksi: Number(no_transaksi),
       tanggal: new Date(),

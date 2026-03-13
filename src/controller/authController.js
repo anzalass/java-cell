@@ -88,7 +88,7 @@ export const deleteUserHandler = async (req, res) => {
 export const loginController2 = async (req, res) => {
   try {
     const result = await login(req.body);
-
+    //khusus dev
     // Simpan token di cookie (HTTP-only)
     // res.cookie("auth_token", result.token, {
     //   httpOnly: true,
@@ -97,6 +97,7 @@ export const loginController2 = async (req, res) => {
     //   maxAge: 3 * 24 * 60 * 60 * 1000,
     // });
 
+    // khusus prod
     res.cookie("auth_token", result.token, {
       httpOnly: true,
       secure: true, // WAJIB karena HTTPS
@@ -123,6 +124,7 @@ export const loginController2 = async (req, res) => {
 // handlers/auth.handler.js
 export const logoutHandler = async (req, res) => {
   try {
+    // khusus devvv
     // Hapus cookie di client
     // res.clearCookie("auth_token", {
     //   httpOnly: true,
@@ -130,6 +132,7 @@ export const logoutHandler = async (req, res) => {
     //   sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
     // });
 
+    //khusus prod
     res.clearCookie("auth_token", {
       httpOnly: true,
       secure: true,
