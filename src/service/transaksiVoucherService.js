@@ -1,183 +1,299 @@
 import { PrismaClient } from "@prisma/client";
-import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
+import { createLog } from "./logService.js";
 const prisma = new PrismaClient();
 
 // src/services/grosir.service.js
-export const createGrosirOrder = async ({
-  kodeDownline,
-  items,
-  tanggal,
-  keuntungan,
-  idUser,
-  penempatan,
-  status,
-}) => {
-  // Validasi input
-  if (!kodeDownline) throw new Error("Kode downline wajib diisi");
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    throw new Error("Pesanan tidak boleh kosong");
-  }
+export const createGrosirOrder = async (
+  { kodeDownline, items, tanggal, keuntungan, idUser, penempatan, status },
+  user
+) => {
+  try {
+    if (!kodeDownline) throw new Error("Kode downline wajib diisi");
 
-  return await prisma.$transaction(async (tx) => {
-    // 1. Cek apakah downline valid
-    const downline = await tx.downline.findUnique({
-      where: { kodeDownline },
-    });
-    if (!downline) {
-      throw new Error(`Downline dengan kode ${kodeDownline} tidak ditemukan`);
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error("Pesanan tidak boleh kosong");
     }
 
-    let totalHarga = 0;
-    const itemsToCreate = [];
+    return await prisma.$transaction(async (tx) => {
+      const downline = await tx.downline.findUnique({
+        where: { kodeDownline },
+      });
 
-    // 2. Validasi setiap item & hitung total
-    for (const item of items) {
-      const { idVoucher, quantity } = item;
-
-      if (!idVoucher || !quantity || quantity <= 0) {
-        throw new Error(
-          "Item pesanan tidak valid: idVoucher dan quantity wajib"
-        );
+      if (!downline) {
+        throw new Error(`Downline dengan kode ${kodeDownline} tidak ditemukan`);
       }
 
-      // Ambil data voucher
-      const voucher = await tx.voucher.findUnique({
-        where: { id: idVoucher },
-        select: {
-          id: true,
-          nama: true,
-          brand: true,
-          stok: true,
-          hargaJual: true,
-          hargaPokok: true,
+      let totalHarga = 0;
+      const itemsToCreate = [];
+
+      for (const item of items) {
+        const { idVoucher, quantity } = item;
+
+        if (!idVoucher || !quantity || quantity <= 0) {
+          throw new Error(
+            "Item pesanan tidak valid: idVoucher dan quantity wajib"
+          );
+        }
+
+        const voucher = await tx.voucher.findUnique({
+          where: { id: idVoucher },
+          select: {
+            id: true,
+            nama: true,
+            brand: true,
+            stok: true,
+            hargaJual: true,
+          },
+        });
+
+        if (!voucher) {
+          throw new Error(`Voucher dengan ID ${idVoucher} tidak ditemukan`);
+        }
+
+        if (voucher.stok < quantity) {
+          throw new Error(
+            `Stok ${voucher.brand} ${voucher.nama} tidak mencukupi`
+          );
+        }
+
+        totalHarga += voucher.hargaJual * quantity;
+
+        itemsToCreate.push({
+          idVoucher: voucher.id,
+          quantity,
+        });
+      }
+
+      const transaksi = await tx.transaksiVoucherDownline.create({
+        data: {
+          downline: {
+            connect: { kodeDownline },
+          },
+
+          totalHarga,
+
+          Toko: {
+            connect: { id: user.toko_id },
+          },
+
+          keuntungan,
+
+          tanggal: new Date(`${tanggal}T00:00:00Z`),
+
+          status: status || "Selesai",
+
+          items: {
+            create: itemsToCreate.map((item) => ({
+              quantity: item.quantity,
+
+              tanggal: new Date(`${tanggal}T00:00:00Z`),
+
+              Toko: {
+                connect: { id: user.toko_id },
+              },
+
+              Voucher: {
+                connect: { id: item.idVoucher },
+              },
+            })),
+          },
         },
       });
 
-      if (!voucher) {
-        throw new Error(`Voucher dengan ID ${idVoucher} tidak ditemukan`);
-      }
+      await Promise.all(
+        itemsToCreate.map((item) =>
+          tx.voucher.update({
+            where: { id: item.idVoucher },
+            data: {
+              stok: { decrement: item.quantity },
+            },
+          })
+        )
+      );
 
-      if (voucher.stok < quantity) {
-        throw new Error(
-          `Stok ${voucher.brand} ${voucher.nama} tidak mencukupi. Tersedia: ${voucher.stok}`
-        );
-      }
+      // 🔥 CREATE LOG
+      await createLog(
+        {
+          kategori: "Transaksi Voucher Downline",
+          keterangan: `${user.nama} membuat transaksi grosir untuk downline ${kodeDownline}`,
+          nominal: keuntungan,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
 
-      if (voucher.hargaJual == null) {
-        throw new Error(`Harga jual voucher ${voucher.nama} belum diatur`);
-      }
-
-      const subtotal = voucher.hargaJual * quantity;
-      totalHarga += subtotal;
-
-      itemsToCreate.push({
-        idVoucher: voucher.id,
-        quantity,
-      });
-    }
-
-    // 3. Buat transaksi utama
-    const transaksi = await tx.transaksiVoucherDownline.create({
-      data: {
+      return {
+        id: transaksi.id,
         kodeDownline,
         totalHarga,
-        penempatan: penempatan ? penempatan : "Java 1",
-        idUser,
-        keuntungan: keuntungan,
-        tanggal: new Date(`${tanggal}T00:00:00Z`), // sesuai model: `tanggal DateTime`
-        status: status ? status : "Selesai", // atau "pending", "dibayar", dll
-      },
+        items: itemsToCreate.length,
+        tanggal: transaksi.tanggal,
+      };
     });
+  } catch (error) {
+    console.error("Error createGrosirOrder:", error);
 
-    // 4. Buat item transaksi + kurangi stok
-    for (const item of itemsToCreate) {
-      const { idVoucher, quantity } = item;
-
-      // Kurangi stok
-      await tx.voucher.update({
-        where: { id: idVoucher },
-        data: { stok: { decrement: quantity } },
-      });
-
-      // Buat item transaksi
-      await tx.itemsTransaksiVoucherDownline.create({
-        data: {
-          idTransaksi: transaksi.id,
-          idVoucher,
-          quantity,
-          tanggal: new Date(`${tanggal}T00:00:00Z`), // sesuai model: `tanggal DateTime`
-        },
-      });
-    }
-
-    return {
-      id: transaksi.id,
-      kodeDownline,
-      totalHarga,
-      items: itemsToCreate.length,
-      tanggal: transaksi.tanggal,
-    };
-  });
+    throw new Error(
+      error.message || "Terjadi kesalahan saat membuat transaksi grosir"
+    );
+  }
 };
 
-export const deletePendingTransaksi = async (idTransaksi) => {
-  if (!idTransaksi) {
-    throw new Error("ID transaksi wajib diisi");
-  }
+export const deleteTransaksi = async (idTransaksi) => {
+  try {
+    if (!idTransaksi) {
+      throw new Error("ID transaksi wajib diisi");
+    }
 
-  return await prisma.$transaction(async (tx) => {
-    // 1. Cari transaksi
-    const transaksi = await tx.transaksiVoucherDownline.findUnique({
-      where: { id: idTransaksi },
-      include: {
-        items: {
-          include: {
-            Voucher: {
-              select: { id: true, stok: true },
+    return await prisma.$transaction(async (tx) => {
+      const transaksi = await tx.transaksiVoucherDownline.findUnique({
+        where: { id: idTransaksi },
+        include: {
+          items: {
+            include: {
+              Voucher: {
+                select: { id: true },
+              },
             },
           },
         },
-      },
-    });
-
-    if (!transaksi) {
-      throw new Error("Transaksi tidak ditemukan");
-    }
-
-    console.log("trxc", transaksi.status);
-
-    // 2. Pastikan status masih "pending"
-    if (transaksi.status !== "Proses" && transaksi.status !== "Pending") {
-      throw new Error(
-        "Hanya transaksi dengan status 'Pending' atau 'Proses' yang bisa dihapus"
-      );
-    }
-
-    // 3. Kembalikan stok untuk setiap item
-    for (const item of transaksi.items) {
-      await tx.voucher.update({
-        where: { id: item.Voucher.id },
-        data: { stok: { increment: item.quantity } },
       });
-    }
 
-    // 4. Hapus semua item transaksi
-    await tx.itemsTransaksiVoucherDownline.deleteMany({
-      where: { idTransaksi: transaksi.id },
+      if (!transaksi) {
+        throw new Error("Transaksi tidak ditemukan");
+      }
+
+      for (const item of transaksi.items) {
+        await tx.voucher.update({
+          where: { id: item.Voucher.id },
+          data: {
+            stok: { increment: item.quantity },
+          },
+        });
+      }
+
+      const now = new Date();
+
+      await tx.itemsTransaksiVoucherDownline.updateMany({
+        where: { idTransaksi: transaksi.id },
+        data: {
+          deletedAt: now,
+        },
+      });
+
+      await tx.transaksiVoucherDownline.update({
+        where: { id: transaksi.id },
+        data: {
+          deletedAt: now,
+        },
+      });
+
+
+      await createLog(
+        {
+          kategori: "Transaksi Voucher Downline",
+          keterangan: `${user.nama} menghapus transaksi voucher downline`,
+          nominal: transaksi.keuntungan,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return {
+        success: true,
+        message: "Transaksi berhasil dihapus dan stok dikembalikan",
+      };
     });
+  } catch (error) {
+    console.error("Error deleteTransaksi:", error);
 
-    // 5. Hapus transaksi utama
-    await tx.transaksiVoucherDownline.delete({
-      where: { id: transaksi.id },
-    });
-
-    return {
-      success: true,
-      message: "Transaksi berhasil dihapus dan stok dikembalikan",
-    };
-  });
+    throw new Error(
+      error.message || "Terjadi kesalahan saat menghapus transaksi"
+    );
+  }
 };
 
+export const deletePendingTransaksi = async (idTransaksi) => {
+  try {
+    if (!idTransaksi) {
+      throw new Error("ID transaksi wajib diisi");
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      const transaksi = await tx.transaksiVoucherDownline.findUnique({
+        where: { id: idTransaksi },
+        include: {
+          items: {
+            include: {
+              Voucher: {
+                select: { id: true },
+              },
+            },
+          },
+        },
+      });
+
+      if (!transaksi) {
+        throw new Error("Transaksi tidak ditemukan");
+      }
+
+      if (transaksi.status !== "Proses" && transaksi.status !== "Pending") {
+        throw new Error(
+          "Hanya transaksi dengan status 'Pending' atau 'Proses' yang bisa dihapus"
+        );
+      }
+
+      for (const item of transaksi.items) {
+        await tx.voucher.update({
+          where: { id: item.Voucher.id },
+          data: {
+            stok: { increment: item.quantity },
+          },
+        });
+      }
+
+      const now = new Date();
+
+      await tx.itemsTransaksiVoucherDownline.updateMany({
+        where: { idTransaksi: transaksi.id },
+        data: {
+          deletedAt: now,
+        },
+      });
+
+      await tx.transaksiVoucherDownline.update({
+        where: { id: transaksi.id },
+        data: {
+          deletedAt: now,
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Transaksi Voucher Downline",
+          keterangan: `${user.nama} menghapus transaksi pending`,
+          nominal: transaksi.keuntungan,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return {
+        success: true,
+        message: "Transaksi berhasil dihapus dan stok dikembalikan",
+      };
+    });
+  } catch (error) {
+    console.error("Error deletePendingTransaksi:", error);
+
+    throw new Error(
+      error.message || "Terjadi kesalahan saat menghapus transaksi pending"
+    );
+  }
+};
 // src/services/transaksiGrosir.service.js
 
 // GET ALL with filter & pagination
@@ -187,12 +303,19 @@ export const getAllTransaksiGrosir = async ({
   search = "", // kodeDownline
   startDate,
   endDate,
+  idToko,
+  deletedFilter = "active",
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
 
   const where = {};
-
+  where.idToko = idToko;
+  if (deletedFilter === "active") {
+    where.deletedAt = null;
+  } else if (deletedFilter === "deleted") {
+    where.deletedAt = { not: null };
+  }
   // Filter kodeDownline
   if (search) {
     where.kodeDownline = { contains: search, mode: "insensitive" };
@@ -245,7 +368,7 @@ export const getAllTransaksiGrosir = async ({
       kodeDownline: trx.kodeDownline,
       downline: trx.downline,
       totalHarga: trx.totalHarga,
-      tanggal: trx.tanggal.toISOString().split("T")[0], // "YYYY-MM-DD"
+      tanggal: trx.createdAt,
       status: trx.status,
       keuntungan: trx.keuntungan,
       detail: {
@@ -278,8 +401,6 @@ export const updateTransaksiStatus = async (id, status) => {
   if (!allowedStatus.includes(status)) {
     throw new Error("Status tidak valid");
   }
-
-  console.log("stts", status);
 
   return await prisma.transaksiVoucherDownline.update({
     where: { id },
@@ -338,6 +459,7 @@ export const getLaporanBarangKeluar = async ({
   searchNama = "",
   brand = "", // ✅ TAMBAH BRAND
   sortQty = "none",
+  idToko,
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
@@ -353,6 +475,8 @@ export const getLaporanBarangKeluar = async ({
       gte: start,
       lte: end,
     },
+    idToko: idToko,
+    deletedAt: null,
     Voucher: {
       ...(searchNama && {
         nama: { contains: searchNama, mode: "insensitive" },
@@ -395,16 +519,20 @@ export const getLaporanBarangKeluar = async ({
         id: key,
         namaBarang: item.Voucher.nama,
         merk: item.Voucher.brand,
-        hargaModal: 0,
-        hargaJual: 0,
+        hargaModal: item.Voucher.hargaPokok,
+        hargaJual: item.Voucher.hargaJual,
         qty: 0,
+        modal: 0,
+        keuntungan: 0,
         tanggalTerakhir: item.tanggal || item.transaksi?.tanggal,
       };
     }
 
     acc[key].qty += item.quantity;
-    acc[key].hargaModal += item.quantity * item.Voucher.hargaPokok;
-    acc[key].hargaJual += item.quantity * item.Voucher.hargaJual;
+    acc[key].modal += item.quantity * item.Voucher.hargaPokok;
+    acc[key].keuntungan +=
+      item.quantity * item.Voucher.hargaJual -
+      item.quantity * item.Voucher.hargaPokok;
 
     const itemDate = item.tanggal || item.transaksi?.tanggal;
     if (itemDate > acc[key].tanggalTerakhir) {
@@ -446,23 +574,38 @@ export const getLaporanBarangKeluar = async ({
   };
 };
 
-export const getDetailTransaksiVoucherDownline = async (id) => {
-  const transaksi = await prisma.transaksiVoucherDownline.findUnique({
-    where: { id },
-    include: {
-      downline: true,
-      User: true,
-      items: {
-        include: {
-          Voucher: true,
+export const getDetailTransaksiVoucherDownline = async (id, user) => {
+  try {
+    const transaksi = await prisma.transaksiVoucherDownline.findUnique({
+      where: { id },
+      include: {
+        downline: true,
+        items: {
+          include: {
+            Voucher: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  if (!transaksi) {
-    throw new Error("Transaksi tidak ditemukan");
+    if (!transaksi) {
+      throw new Error("Transaksi tidak ditemukan");
+    }
+
+    const toko = await prisma.toko.findUnique({
+      where: {
+        id: user.toko_id,
+      },
+    });
+
+    return {
+      namaToko: toko.namaToko,
+      logoToko: toko.logoToko,
+      alamat: toko.alamat,
+      noTelp: toko.noTelp,
+      transaksi,
+    };
+  } catch (error) {
+    console.log(error);
   }
-
-  return transaksi;
 };

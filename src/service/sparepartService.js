@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { createLog } from "./logService.js";
 const prisma = new PrismaClient();
 
 // src/services/sparepart.service.js
@@ -6,25 +7,30 @@ const prisma = new PrismaClient();
 // -------------------------
 // GET ALL with filter & pagination
 // -------------------------
-export const getAllSpareParts = async ({
-  page = 1,
-  pageSize = 10,
-  search = "",
-  brand = "",
-  penempatan = "",
-  createdStart,
-  createdEnd,
-  updatedStart,
-  updatedEnd,
-  filterBarcode = "all",
-  sortBy = "createdAt",
-  sortOrder = "desc",
-}) => {
+export const getAllSpareParts = async (
+  {
+    page = 1,
+    pageSize = 10,
+    search = "",
+    brand = "",
+    penempatan = "",
+    createdStart,
+    createdEnd,
+    updatedStart,
+    updatedEnd,
+    filterBarcode = "all",
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  },
+  user
+) => {
   try {
     const skip = (Number(page) - 1) * Number(pageSize);
     const take = Number(pageSize);
 
     const where = {};
+    where.isActive = true;
+    where.idToko = user.toko_id;
 
     // ✅ CREATED RANGE
     if (createdStart || createdEnd) {
@@ -49,6 +55,12 @@ export const getAllSpareParts = async ({
         }),
       };
     }
+
+    if (!user) {
+      throw new Error("Toko tidak ditemukan");
+    }
+
+    where.idToko = user.toko_id;
 
     // ✅ SEARCH
     if (search) {
@@ -136,48 +148,6 @@ export const getAllSpareParts = async ({
 };
 
 // -------------------------
-// CREATE
-// -------------------------
-export const createSparePart = async (data, user) => {
-  const {
-    barcode,
-    nama,
-    kategori,
-    brand,
-    stok,
-    hargaModal,
-    hargaJual,
-    penempatan,
-  } = data;
-
-  // Validasi wajib
-  if (
-    !nama ||
-    !brand ||
-    stok == null ||
-    hargaModal == null ||
-    hargaJual == null
-  ) {
-    throw new Error("Field wajib tidak lengkap");
-  }
-
-  return await prisma.sparePart.create({
-    data: {
-      barcode,
-      nama,
-      kategori,
-      brand,
-      penempatan,
-      stok: Number(stok),
-      hargaModal: Number(hargaModal),
-      hargaJual: Number(hargaJual),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-  });
-};
-
-// -------------------------
 // GET ONE
 // -------------------------
 export const getSparePartById = async (id) => {
@@ -188,81 +158,202 @@ export const getSparePartById = async (id) => {
   return sparePart;
 };
 
-// -------------------------
-// UPDATE
-// -------------------------
-export const updateSparePart = async (id, data) => {
-  const { barcode, nama, kategori, brand, stok, hargaModal, hargaJual } = data;
+export const createSparePart = async (data, user) => {
+  try {
+    const {
+      barcode,
+      nama,
+      kategori,
+      brand,
+      stok,
+      hargaModal,
+      hargaJual,
+      penempatan,
+    } = data;
 
-  return await prisma.sparePart.update({
-    where: { id },
-    data: {
-      ...(barcode !== undefined && { barcode }),
-      ...(nama !== undefined && { nama }),
-      ...(kategori !== undefined && { kategori }),
-      ...(brand !== undefined && { brand }),
-      ...(stok !== undefined && { stok: Number(stok) }),
-      ...(hargaModal !== undefined && { hargaModal: Number(hargaModal) }),
-      ...(hargaJual !== undefined && { hargaJual: Number(hargaJual) }),
-      updatedAt: new Date(),
-    },
-  });
-};
-
-// -------------------------
-// DELETE
-// -------------------------
-export const deleteSparePart = async (id) => {
-  return await prisma.sparePart.delete({
-    where: { id },
-  });
-};
-
-export const updateSparePartStok = async (id, { tipe, stok }) => {
-  // Validasi
-  if (!["tambah", "kurang"].includes(tipe)) {
-    console.log(tipe);
-
-    throw new Error("Tipe harus 'tambah' atau 'kurang'");
-  }
-  if (typeof stok !== "number" || stok <= 0) {
-    throw new Error("Stok harus angka positif");
-  }
-
-  return await prisma.$transaction(async (tx) => {
-    // Ambil data saat ini
-    const current = await tx.sparePart.findUnique({
-      where: { id },
-      select: { stok: true },
-    });
-    if (!current) throw new Error("Sparepart tidak ditemukan");
-
-    let newStok;
-    if (tipe === "tambah") {
-      newStok = current.stok + stok;
-    } else {
-      newStok = current.stok - stok;
-      if (newStok < 0) {
-        throw new Error("Stok tidak boleh minus");
-      }
+    if (
+      !nama ||
+      !brand ||
+      stok == null ||
+      hargaModal == null ||
+      hargaJual == null
+    ) {
+      throw new Error("Field wajib tidak lengkap");
     }
 
-    // Update stok dan updatedAt
-    const updated = await tx.sparePart.update({
-      where: { id },
-      data: {
-        stok: newStok,
-        updatedAt: new Date(), // ⚠️ sesuai model: updatedAt
-      },
-    });
+    return await prisma.$transaction(async (tx) => {
+      const sparePart = await tx.sparePart.create({
+        data: {
+          barcode,
+          nama,
+          kategori,
+          brand,
+          penempatan,
+          stok: Number(stok),
+          hargaModal: Number(hargaModal),
+          hargaJual: Number(hargaJual),
+          idToko: user.toko_id,
+        },
+      });
 
-    return updated;
-  });
+      await createLog(
+        {
+          kategori: "Sparepart",
+          keterangan: `${user.nama} menambahkan sparepart ${nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return sparePart;
+    });
+  } catch (error) {
+    console.error("Error createSparePart:", error);
+    throw new Error("Gagal membuat sparepart");
+  }
 };
 
-export const sparePartMaster = async () => {
+export const updateSparePart = async (id, data, user) => {
   try {
-    return await prisma.sparePart.findMany({});
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.sparePart.findUnique({
+        where: { id },
+      });
+
+      if (!existing) {
+        throw new Error("Sparepart tidak ditemukan");
+      }
+
+      const updated = await tx.sparePart.update({
+        where: { id },
+        data: {
+          ...(data.barcode !== undefined && { barcode: data.barcode }),
+          ...(data.nama !== undefined && { nama: data.nama }),
+          ...(data.kategori !== undefined && { kategori: data.kategori }),
+          ...(data.brand !== undefined && { brand: data.brand }),
+          ...(data.stok !== undefined && { stok: Number(data.stok) }),
+          ...(data.hargaModal !== undefined && {
+            hargaModal: Number(data.hargaModal),
+          }),
+          ...(data.hargaJual !== undefined && {
+            hargaJual: Number(data.hargaJual),
+          }),
+          updatedAt: new Date(),
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Sparepart",
+          keterangan: `${user.nama} mengupdate sparepart ${updated.nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return updated;
+    });
+  } catch (error) {
+    console.error("Error updateSparePart:", error);
+    throw new Error("Gagal mengupdate sparepart");
+  }
+};
+
+export const deleteSparePart = async (id, user) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const sparePart = await tx.sparePart.findUnique({
+        where: { id },
+      });
+
+      if (!sparePart) {
+        throw new Error("Sparepart tidak ditemukan");
+      }
+
+      const deleted = await tx.sparePart.update({
+        where: { id },
+        data: {
+          deletedAt: new Date(),
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Sparepart",
+          keterangan: `${user.nama} menghapus sparepart ${deleted.nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return deleted;
+    });
+  } catch (error) {
+    console.error("Error deleteSparePart:", error);
+    throw new Error("Gagal menghapus sparepart");
+  }
+};
+
+export const updateSparePartStok = async (id, { tipe, stok }, user) => {
+  try {
+    if (!["tambah", "kurang"].includes(tipe)) {
+      throw new Error("Tipe harus 'tambah' atau 'kurang'");
+    }
+
+    if (!Number.isInteger(stok) || stok <= 0) {
+      throw new Error("Stok harus angka positif");
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      const sparepart = await tx.sparePart.findUnique({
+        where: { id },
+      });
+
+      if (!sparepart) {
+        throw new Error("Sparepart tidak ditemukan");
+      }
+
+      if (tipe === "kurang" && sparepart.stok < stok) {
+        throw new Error("Stok tidak mencukupi");
+      }
+
+      const updated = await tx.sparePart.update({
+        where: { id },
+        data: {
+          stok: tipe === "tambah" ? { increment: stok } : { decrement: stok },
+          updatedAt: new Date(),
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Sparepart",
+          keterangan: `${user.nama} ${tipe} stok ${updated.nama} sebanyak ${stok}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return updated;
+    });
+  } catch (error) {
+    console.error("Error updateSparePartStok:", error);
+    throw new Error("Gagal mengupdate stok sparepart");
+  }
+};
+
+export const sparePartMaster = async (user) => {
+  try {
+    return await prisma.sparePart.findMany({
+      where: {
+        idToko: user.toko_id,
+        isActive: true,
+      },
+    });
   } catch (error) {
     console.log(error);
 

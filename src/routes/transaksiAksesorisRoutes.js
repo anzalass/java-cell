@@ -4,6 +4,7 @@ import express from "express";
 import {
   createTransaksiAksesorisHandler,
   deleteTransaksiAksesorisHandler,
+  detailTransaksiAksesoris,
   getAllTransaksiAksesorisHandler,
   getLaporanBarangKeluarHandler,
 } from "../controller/transaksiAksesorisController.js";
@@ -11,7 +12,13 @@ import { AuthMiddleware } from "../utils/authMiddleware.js";
 
 const router = express.Router();
 
-router.post("/transaksi-acc", AuthMiddleware, createTransaksiAksesorisHandler); // POST transaksi
+router.post("/transaksi-acc", AuthMiddleware, createTransaksiAksesorisHandler);
+router.get(
+  "/print-transaksi-acc/:id",
+  AuthMiddleware,
+  detailTransaksiAksesoris
+); // POST transaksi
+// POST transaksi
 
 // POST   /api/transaksi/acc      → Buat transaksi
 

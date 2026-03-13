@@ -14,11 +14,14 @@ export const getAllUsers = async ({
   search = "",
   role,
   penempatan,
+  idToko,
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
 
   const where = {};
+
+  where.idToko = idToko;
 
   // Filter pencarian (nama atau email)
   if (search) {
@@ -47,6 +50,7 @@ export const getAllUsers = async ({
       select: {
         id: true,
         nama: true,
+        idToko: true,
         email: true,
         role: true,
         penempatan: true,
@@ -90,7 +94,7 @@ export const getUserById = async (id) => {
 
 // ✅ CREATE
 export const createUser = async (data) => {
-  const { nama, email, password, role, penempatan } = data;
+  const { nama, email, password, role, penempatan, idToko } = data;
 
   // Validasi wajib
   if (!nama || !email || !password || !role) {
@@ -110,6 +114,7 @@ export const createUser = async (data) => {
     data: {
       nama,
       email,
+      idToko,
       password: hashedPassword,
       role,
       penempatan: penempatan || null,
@@ -128,34 +133,43 @@ export const updateUser = async (id, data) => {
 
   // Cek email unik (kecuali milik user ini)
   const existing = await prisma.user.findFirst({
-    where: { email, NOT: { id } },
+    where: {
+      email,
+      NOT: { id },
+    },
   });
+
   if (existing) {
     throw new Error("Email sudah digunakan oleh user lain");
   }
 
-  // Hash password jika diubah
-  let updateData = { nama, email, role, penempatan: penempatan || null };
+  // Data update
+  const updateData = {
+    nama,
+    email,
+    role,
+    penempatan: penempatan || null,
+  };
+
+  // Hash password jika ada
   if (password) {
     updateData.password = await bcrypt.hash(password, SALT_ROUNDS);
   }
 
   const user = await prisma.user.update({
     where: { id },
-    updateData,
+    data: updateData, // ✅ harus pakai data
     select: {
       id: true,
       nama: true,
       email: true,
       role: true,
       penempatan: true,
-      password: false,
     },
   });
 
   return user;
 };
-
 // ✅ DELETE
 export const deleteUser = async (id) => {
   // Cek apakah user ada
@@ -173,6 +187,10 @@ export const login = async (auth) => {
   const { email, password } = auth;
 
   try {
+    if (!process.env.JWT_SECRET_KEY) {
+      throw new Error("JWT secret belum diset");
+    }
+
     const user = await prisma.user.findUnique({
       where: { email },
     });
@@ -187,30 +205,50 @@ export const login = async (auth) => {
       throw new Error("NIP atau password salah");
     }
 
+    const toko = await prisma.toko.findUnique({
+      where: { id: user.idToko },
+    });
+
+    if (!toko) {
+      throw new Error("Data toko tidak ditemukan");
+    }
+
+    if (!toko.SubscribeTime) {
+      throw new Error("Toko belum memiliki masa langganan");
+    }
+
+    if (new Date(toko.SubscribeTime) < new Date()) {
+      throw new Error("Silahkan Perpanjang Langganan");
+    }
+
+    if (!toko.isActive) {
+      throw new Error("Toko Tidak Aktif Silahkan Hubungi CS 0859102604165");
+    }
+
     const token = jwt.sign(
       {
         id: user.id,
         nama: user.nama,
         role: user.role,
         penempatan: user.penempatan,
+        toko_id: toko.id,
       },
       process.env.JWT_SECRET_KEY,
-      { expiresIn: "3d" } // token berlaku 5 menit
+      { expiresIn: "3d" }
     );
-
-    const decoded = jwt.decode(token);
 
     return {
       token,
-      expiresIn: decoded.exp,
-      id: decoded.id,
-      nama: decoded.nama,
-      role: decoded.role,
-      penempatan: decoded.penempatan,
+      id: user.id,
+      nama: user.nama,
+      role: user.role,
+      penempatan: user.penempatan,
+      toko_id: toko.id,
     };
   } catch (error) {
-    console.log(error);
-    const errorMessage = prismaErrorHandler(error);
-    throw new Error(errorMessage);
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(prismaErrorHandler(error));
   }
 };

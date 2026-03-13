@@ -1,119 +1,216 @@
 // src/services/transaksiAksesoris.service.js
 import { PrismaClient } from "@prisma/client";
 import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
+import { createLog } from "./logService.js";
 
 const prisma = new PrismaClient();
 
 // CREATE
-export const createTransaksiAksesoris = async ({
-  items,
-  nama,
-  keuntungan,
-  status = "selesai",
-  idMember,
-  penempatan,
-  idUser,
-}) => {
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    throw new Error("Item transaksi tidak boleh kosong");
-  }
-
-  const generateRandomCode = (length = 8) => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    let result = "";
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  };
-
-  const namaRandom = generateRandomCode();
-
-  return await prisma.$transaction(async (tx) => {
-    let totalHarga = 0;
-    const itemsToCreate = [];
-
-    for (const item of items) {
-      const { idAksesoris, quantity } = item;
-
-      if (!idAksesoris || !quantity || quantity <= 0) {
-        throw new Error("Item tidak valid: idAksesoris dan quantity wajib");
-      }
-
-      const aksesoris = await tx.aksesoris.findUnique({
-        where: { id: idAksesoris },
-        select: { id: true, nama: true, stok: true, hargaJual: true },
-      });
-
-      if (!aksesoris) {
-        throw new Error(`Aksesoris dengan ID ${idAksesoris} tidak ditemukan`);
-      }
-      if (aksesoris.stok < quantity) {
-        throw new Error(`Stok ${aksesoris.nama} tidak mencukupi`);
-      }
-
-      totalHarga += aksesoris.hargaJual * quantity;
-      itemsToCreate.push({ idAksesoris, quantity });
+export const createTransaksiAksesoris = async (
+  { items, nama, keuntungan, status = "selesai", idMember },
+  user
+) => {
+  try {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error("Item transaksi tidak boleh kosong");
     }
 
-    const today = new Date();
-    const tanggal = today.toISOString().split("T")[0];
-    let memberId = null;
+    const generateRandomCode = (length = 8) => {
+      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      return Array.from(
+        { length },
+        () => chars[Math.floor(Math.random() * chars.length)]
+      ).join("");
+    };
 
-    if (idMember) {
-      memberId = await tx.member.findUnique({
+    return await prisma.$transaction(async (tx) => {
+      let totalHarga = 0;
+      const itemsToCreate = [];
+
+      // ambil semua aksesoris sekaligus (lebih cepat)
+      const aksesorisIds = items.map((i) => i.idAksesoris);
+
+      const aksesorisList = await tx.aksesoris.findMany({
         where: {
-          id: idMember,
+          id: { in: aksesorisIds },
         },
         select: {
           id: true,
+          nama: true,
+          stok: true,
+          hargaJual: true,
         },
       });
-    }
 
-    const transaksi = await tx.transaksiAksesoris.create({
-      data: {
-        totalHarga,
-        namaPembeli: nama ? nama : namaRandom,
-        keuntungan: keuntungan,
-        idMember: idMember,
-        penempatan,
-        idUser,
-        tanggal: new Date(`${tanggal}T00:00:00Z`),
-        status,
-      },
-    });
+      const aksesorisMap = Object.fromEntries(
+        aksesorisList.map((a) => [a.id, a])
+      );
 
-    for (const item of itemsToCreate) {
-      await tx.aksesoris.update({
-        where: { id: item.idAksesoris },
-        data: { stok: { decrement: item.quantity } },
-      });
+      for (const item of items) {
+        const { idAksesoris, quantity } = item;
 
-      await tx.itemsTransaksiAksesoris.create({
+        if (!idAksesoris || !quantity || quantity <= 0) {
+          throw new Error("Item tidak valid");
+        }
+
+        const aksesoris = aksesorisMap[idAksesoris];
+
+        if (!aksesoris) {
+          throw new Error(`Aksesoris tidak ditemukan`);
+        }
+
+        if (aksesoris.stok < quantity) {
+          throw new Error(`Stok ${aksesoris.nama} tidak mencukupi`);
+        }
+
+        totalHarga += aksesoris.hargaJual * quantity;
+
+        itemsToCreate.push({
+          idAksesoris,
+          quantity,
+        });
+      }
+
+      let member = null;
+
+      if (idMember) {
+        member = await tx.member.findUnique({
+          where: { id: idMember },
+          select: { id: true, nama: true },
+        });
+      }
+
+      const transaksi = await tx.transaksiAksesoris.create({
         data: {
-          idTransaksi: transaksi.id,
-          idAksesoris: item.idAksesoris,
-          quantity: item.quantity,
-          tanggal: new Date(`${tanggal}T00:00:00Z`),
-        },
-      });
-    }
+          totalHarga,
+          keuntungan,
+          namaPembeli: member?.nama || nama || generateRandomCode(),
+          status,
+          tanggal: new Date(),
 
-    if (memberId) {
-      await tx.member.update({
-        where: {
-          id: idMember, // pastikan `noTelp` unique!
-        },
-        data: {
-          totalTransaksi: {
-            increment: keuntungan, // ✅ Tambahkan nilai ini
+          Toko: {
+            connect: {
+              id: user.toko_id,
+            },
+          },
+
+          ...(member && {
+            Member: {
+              connect: { id: member.id },
+            },
+          }),
+
+          items: {
+            create: itemsToCreate.map((item) => ({
+              quantity: item.quantity,
+              tanggal: new Date(),
+              Toko: {
+                connect: {
+                  id: user.toko_id,
+                },
+              },
+              Aksesoris: {
+                connect: { id: item.idAksesoris },
+              },
+            })),
           },
         },
       });
-    }
-    return { id: transaksi.id, totalHarga };
-  });
+      // update stok
+      for (const item of itemsToCreate) {
+        await tx.aksesoris.update({
+          where: { id: item.idAksesoris },
+          data: {
+            stok: { decrement: item.quantity },
+          },
+        });
+      }
+
+      await createLog(
+        {
+          kategori: "Transaksi Aksesoris",
+          keterangan: `${user.nama} membuat transaksi aksesoris`,
+          nominal: transaksi.keuntungan,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return {
+        id: transaksi.id,
+        totalHarga,
+      };
+    });
+  } catch (error) {
+    console.error("Error createTransaksiSparepart:", error);
+
+    throw new Error(
+      error.message || "Terjadi kesalahan saat membuat transaksi sparepart"
+    );
+  }
+};
+
+export const deleteTransaksiAksesoris = async (idTransaksi, user) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const transaksi = await tx.transaksiAksesoris.findUnique({
+        where: { id: idTransaksi },
+        include: {
+          items: true,
+        },
+      });
+
+      if (!transaksi) {
+        throw new Error("Transaksi tidak ditemukan");
+      }
+
+      for (const item of transaksi.items) {
+        await tx.aksesoris.update({
+          where: { id: item.idAksesoris },
+          data: {
+            stok: { increment: item.quantity },
+          },
+        });
+      }
+
+      const now = new Date();
+
+      await tx.transaksiAksesoris.update({
+        where: { id: idTransaksi },
+        data: {
+          deletedAt: now,
+        },
+      });
+
+      await tx.itemsTransaksiAksesoris.updateMany({
+        where: {
+          idTransaksi: idTransaksi,
+        },
+        data: {
+          deletedAt: now,
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Transaksi Aksesoris",
+          keterangan: `${user.nama} menghapus transaksi aksesoris`,
+          nominal: transaksi.keuntungan,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return { success: true };
+    });
+  } catch (error) {
+    console.error("Error createTransaksiSparepart:", error);
+    throw new Error(
+      error.message || "Terjadi kesalahan saat membuat transaksi sparepart"
+    );
+  }
 };
 
 // ✅ GET ALL dengan filter & pagination
@@ -124,25 +221,37 @@ export const getAllTransaksiAksesoris = async ({
   startDate,
   endDate,
   status,
+  idToko,
+  deletedFilter = "active", // ✅ PARAM BARU
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
 
-  const where = {};
+  const where = {
+    idToko,
+  };
 
-  // Filter pencarian (namaPembeli)
+  // ✅ Flexible deletedAt filter
+  if (deletedFilter === "active") {
+    where.deletedAt = null;
+  } else if (deletedFilter === "deleted") {
+    where.deletedAt = { not: null };
+  }
+  // kalau "all" → tidak set deletedAt sama sekali
+
+  // 🔍 Filter pencarian
   if (search) {
     where.namaPembeli = { contains: search, mode: "insensitive" };
   }
 
-  // Filter tanggal
+  // 📅 Filter tanggal
   if (startDate || endDate) {
     where.tanggal = {};
     if (startDate) where.tanggal.gte = new Date(startDate);
     if (endDate) where.tanggal.lte = new Date(endDate);
   }
 
-  // Filter status
+  // 📌 Filter status
   if (status) {
     where.status = status;
   }
@@ -150,14 +259,18 @@ export const getAllTransaksiAksesoris = async ({
   const [data, total] = await prisma.$transaction([
     prisma.transaksiAksesoris.findMany({
       where,
-      // skip,
-      // take,
+      skip,
+      take,
       orderBy: { tanggal: "desc" },
       include: {
         items: {
           include: {
             Aksesoris: {
-              select: { nama: true, hargaModal: true, hargaJual: true },
+              select: {
+                nama: true,
+                hargaModal: true,
+                hargaJual: true,
+              },
             },
           },
         },
@@ -166,7 +279,6 @@ export const getAllTransaksiAksesoris = async ({
     prisma.transaksiAksesoris.count({ where }),
   ]);
 
-  // Format data untuk frontend
   const formatted = data.map((trx) => {
     const totalKeuntungan = trx.items.reduce((sum, item) => {
       const modal = item.Aksesoris.hargaModal || 0;
@@ -179,8 +291,9 @@ export const getAllTransaksiAksesoris = async ({
       namaPembeli: trx.namaPembeli,
       totalHarga: trx.totalHarga,
       keuntungan: trx.keuntungan || totalKeuntungan,
-      tanggal: trx.tanggal.toISOString().split("T")[0],
+      tanggal: trx.createdAt,
       status: trx.status,
+      deletedAt: trx.deletedAt,
       detail: {
         itemTransaksi: trx.items.map((item) => ({
           id: item.id,
@@ -202,41 +315,6 @@ export const getAllTransaksiAksesoris = async ({
       totalPages: Math.ceil(total / take),
     },
   };
-};
-
-// ✅ DELETE (rollback stok)
-export const deleteTransaksiAksesoris = async (idTransaksi) => {
-  return await prisma.$transaction(async (tx) => {
-    // Cari transaksi
-    const transaksi = await tx.transaksiAksesoris.findUnique({
-      where: { id: idTransaksi },
-      include: { items: true },
-    });
-
-    if (!transaksi) {
-      throw new Error("Transaksi tidak ditemukan");
-    }
-
-    // Kembalikan stok untuk setiap item
-    for (const item of transaksi.items) {
-      await tx.aksesoris.update({
-        where: { id: item.idAksesoris },
-        data: { stok: { increment: item.quantity } },
-      });
-    }
-
-    // Hapus items terlebih dahulu
-    await tx.itemsTransaksiAksesoris.deleteMany({
-      where: { idTransaksi },
-    });
-
-    // Hapus transaksi utama
-    await tx.transaksiAksesoris.delete({
-      where: { id: idTransaksi },
-    });
-
-    return { success: true };
-  });
 };
 
 const getDateRange = (period, startDate, endDate) => {
@@ -279,15 +357,18 @@ const getDateRange = (period, startDate, endDate) => {
   return { start: new Date("1970-01-01"), end: now };
 };
 
-export const getLaporanBarangKeluar = async ({
-  page = 1,
-  pageSize = 10,
-  filterPeriod = "all",
-  startDate,
-  endDate,
-  searchNama = "",
-  sortQty = "none", // "asc", "desc", "none"
-}) => {
+export const getLaporanBarangKeluar = async (
+  {
+    page = 1,
+    pageSize = 10,
+    filterPeriod = "all",
+    startDate,
+    endDate,
+    searchNama = "",
+    sortQty = "none", // "asc", "desc", "none"
+  },
+  user
+) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
 
@@ -300,11 +381,13 @@ export const getLaporanBarangKeluar = async ({
       gte: start,
       lte: end,
     },
+    idToko: user.toko_id,
     ...(searchNama && {
       Aksesoris: {
         nama: { contains: searchNama, mode: "insensitive" },
       },
     }),
+    deletedAt: null,
   };
 
   const allItems = await prisma.itemsTransaksiAksesoris.findMany({
@@ -336,14 +419,17 @@ export const getLaporanBarangKeluar = async ({
         merk: item.Aksesoris.brand,
         hargaModal: item.Aksesoris.hargaModal,
         hargaJual: item.Aksesoris.hargaJual,
+        modal: 0,
+        keuntungan: 0,
         qty: 0,
         tanggalTerakhir: item.tanggal || item.TransaksiAksesoris?.tanggal,
       };
     }
 
     acc[key].qty += item.quantity;
-    acc[key].hargaModal = item.quantity * item.Aksesoris.hargaModal;
-    acc[key].hargaJual = item.quantity * item.Aksesoris.hargaJual;
+    acc[key].modal += item.quantity * item.Aksesoris.hargaModal;
+    acc[key].keuntungan +=
+      item.quantity * (item.Aksesoris.hargaJual - item.Aksesoris.hargaModal);
 
     // Update tanggal terakhir jika lebih baru
     const itemDate = item.tanggal || item.TransaksiAksesoris?.tanggal;
@@ -390,4 +476,38 @@ export const getLaporanBarangKeluar = async ({
       totalPages: Math.ceil(totalCount / take),
     },
   };
+};
+
+export const getDetailTransaksiAksesoris = async (id, user) => {
+  const transaksi = await prisma.transaksiAksesoris.findUnique({
+    where: { id },
+    include: {
+      Member: true,
+      items: {
+        include: {
+          Aksesoris: true,
+        },
+      },
+    },
+  });
+
+  if (!transaksi) {
+    throw new Error("Transaksi tidak ditemukan");
+  }
+
+  const toko = await prisma.toko.findUnique({
+    where: {
+      id: user.toko_id,
+    },
+  });
+
+  return {
+    namaToko: toko.namaToko,
+    logoToko: toko.logoToko,
+    alamat: toko.alamat,
+    noTelp: toko.noTelp,
+    transaksi,
+  };
+
+  return transaksi;
 };

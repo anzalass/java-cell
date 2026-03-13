@@ -15,7 +15,7 @@ const router = express.Router();
 
 router.post("/vouchers", AuthMiddleware, createVoucherHandler);
 router.get("/vouchers", AuthMiddleware, getVouchersHandler);
-router.get("/vouchers-master", getVoucherMaster);
+router.get("/vouchers-master", AuthMiddleware, getVoucherMaster);
 
 router.get("/vouchers/:id", AuthMiddleware, getVoucherByIdHandler);
 router.put("/vouchers/:id", AuthMiddleware, updateVoucherHandler);

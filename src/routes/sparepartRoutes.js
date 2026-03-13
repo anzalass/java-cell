@@ -16,7 +16,7 @@ const router = Router();
 router.get("/sparepart", AuthMiddleware, getAllSparePartsHandler); // ✅ GET all + filter
 router.post("/sparepart", AuthMiddleware, createSparePartHandler); // ✅ CREATE
 router.get("/sparepart/:id", AuthMiddleware, getSparePartHandler); // ✅ GET one
-router.get("/sparepart-master", getSparepartMaster);
+router.get("/sparepart-master", AuthMiddleware, getSparepartMaster);
 
 router.put("/sparepart/:id", AuthMiddleware, updateSparePartHandler); // ✅ UPDATE
 router.delete("/sparepart/:id", AuthMiddleware, deleteSparePartHandler); // ✅ DELETE

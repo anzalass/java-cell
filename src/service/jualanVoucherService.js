@@ -1,95 +1,164 @@
 import { PrismaClient } from "@prisma/client";
+import { createLog } from "./logService.js";
+
 const prisma = new PrismaClient();
 
-export const createJualan = async (idVoucher) => {
+/* =========================
+   CREATE JUALAN VOUCHER
+========================= */
+export const createJualan = async (data, user) => {
   try {
-    // Validasi stok
-    const voucher = await prisma.voucher.findUnique({
-      where: { id: idVoucher },
-    });
+    return await prisma.$transaction(async (tx) => {
+      // 1️⃣ Ambil voucher
+      const voucher = await tx.voucher.findUnique({
+        where: { id: data?.idVoucher },
+      });
 
-    if (!voucher) {
-      throw new Error("Voucher tidak ditemukan");
-    }
+      if (!voucher) {
+        throw new Error("Voucher tidak ditemukan");
+      }
 
-    if (voucher.stok <= 0) {
-      throw new Error("Stok habis");
-    }
+      if (voucher.stok <= 0) {
+        throw new Error("Stok voucher habis");
+      }
 
-    const keuntungan = voucher.hargaEceran - voucher.hargaPokok;
+      const keuntungan = voucher.hargaEceran - voucher.hargaPokok;
 
-    await prisma.transaksiVoucherHarian.create({
-      data: {
-        idVoucher: voucher.id,
-        keuntungan: keuntungan,
-      },
-    });
+      // 2️⃣ Buat transaksi
+      const transaksi = await tx.transaksiVoucherHarian.create({
+        data: {
+          idVoucher: voucher.id,
+          keuntungan,
+          idMember: data?.idMember || null,
+          idToko: user.toko_id,
+        },
+      });
 
-    await prisma.voucher.update({
-      where: { id: idVoucher },
-      data: { stok: { decrement: 1 } }, // ✅ decrement, bukan increment!
+      // 3️⃣ Kurangi stok
+      await tx.voucher.update({
+        where: { id: voucher.id },
+        data: {
+          stok: {
+            decrement: 1,
+          },
+        },
+      });
+
+      // 4️⃣ Log transaksi
+      await createLog(
+        {
+          kategori: "Jualan Voucher Harian",
+          keterangan: `${user.nama} menjual voucher ${voucher.nama}`,
+          nominal: keuntungan,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return transaksi;
     });
   } catch (error) {
     console.error("Error createJualan:", error);
-    throw error; // ✅ lempar error agar bisa ditangkap di frontend
+    throw new Error("Gagal membuat transaksi voucher");
   }
 };
 
-export const deleteTransaksiVoucher = async (idTransaksi) => {
+/* =========================
+   DELETE TRANSAKSI VOUCHER
+========================= */
+export const deleteTransaksiVoucher = async (idTransaksi, user) => {
   try {
-    const transaksi = await prisma.transaksiVoucherHarian.findUnique({
-      where: { id: idTransaksi },
-      include: { Voucher: true }, // Ambil data voucher terkait
-    });
-
-    if (!transaksi) {
-      throw new Error("Transaksi tidak ditemukan");
-    }
-
-    const voucher = transaksi.Voucher;
-    if (!voucher) {
-      throw new Error("Voucher terkait tidak ditemukan");
-    }
-
-    await prisma.$transaction([
-      prisma.transaksiVoucherHarian.delete({
+    return await prisma.$transaction(async (tx) => {
+      const transaksi = await tx.transaksiVoucherHarian.findUnique({
         where: { id: idTransaksi },
-      }),
-      // Kembalikan stok (+1)
-      prisma.voucher.update({
-        where: { id: voucher.id },
-        data: { stok: { increment: 1 } }, // ✅ Kembalikan stok!
-      }),
-    ]);
+        include: { Voucher: true },
+      });
 
-    return {
-      success: true,
-      message: "Transaksi berhasil dihapus dan stok dikembalikan",
-      restoredStok: voucher.stok + 1,
-    };
+      if (!transaksi) {
+        throw new Error("Transaksi tidak ditemukan");
+      }
+
+      const voucher = transaksi.Voucher;
+
+      if (!voucher) {
+        throw new Error("Voucher terkait tidak ditemukan");
+      }
+
+      const now = new Date();
+      const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+
+      // 1️⃣ Soft delete transaksi
+      await tx.transaksiVoucherHarian.update({
+        where: { id: idTransaksi },
+        data: {
+          deletedAt: wib,
+        },
+      });
+
+      // 2️⃣ Kembalikan stok
+      await tx.voucher.update({
+        where: { id: voucher.id },
+        data: {
+          stok: {
+            increment: 1,
+          },
+        },
+      });
+
+      // 3️⃣ Log
+      await createLog(
+        {
+          kategori: "Jualan Voucher Harian",
+          keterangan: `${user.nama} menghapus transaksi voucher ${voucher.nama}`,
+          nominal: voucher.hargaEceran,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return {
+        success: true,
+        message: "Transaksi berhasil dihapus dan stok dikembalikan",
+        restoredStok: voucher.stok + 1,
+      };
+    });
   } catch (error) {
     console.error("Error deleteTransaksiVoucher:", error);
     throw new Error(error.message || "Gagal menghapus transaksi");
   }
 };
-
-export const getJualanVoucherHarian = async () => {
+export const getJualanVoucherHarian = async (
+  user,
+  { deletedFilter = "active" } = {}
+) => {
   try {
-    // Dapatkan tanggal hari ini (tanpa jam)
     const todayStart = new Date();
     todayStart.setUTCHours(0, 0, 0, 0);
 
     const todayEnd = new Date();
     todayEnd.setUTCHours(23, 59, 59, 999);
 
-    // Ambil semua transaksi hari ini + data voucher
-    const transaksiHarian = await prisma.transaksiVoucherHarian.findMany({
-      where: {
-        createdAt: {
-          gte: todayStart,
-          lte: todayEnd,
-        },
+    const where = {
+      idToko: user.toko_id,
+      createdAt: {
+        gte: todayStart,
+        lte: todayEnd,
       },
+      deletedAt: null,
+    };
+
+    // 🔥 Flexible deletedAt
+    if (deletedFilter === "active") {
+      where.deletedAt = null;
+    } else if (deletedFilter === "deleted") {
+      where.deletedAt = { not: null };
+    }
+    // "all" → tidak difilter
+
+    const transaksiHarian = await prisma.transaksiVoucherHarian.findMany({
+      where,
       include: {
         Voucher: {
           select: {
@@ -106,13 +175,12 @@ export const getJualanVoucherHarian = async () => {
       },
     });
 
-    // Hitung statistik
     let totalOmset = 0;
     let totalKeuntungan = 0;
 
     transaksiHarian.forEach((trx) => {
       totalOmset += trx.Voucher.hargaEceran;
-      totalKeuntungan += trx.keuntungan; // asumsi field keuntungan sudah dihitung saat create
+      totalKeuntungan += trx.keuntungan;
     });
 
     return {
@@ -126,6 +194,7 @@ export const getJualanVoucherHarian = async () => {
         },
         hargaJual: trx.Voucher.hargaEceran,
         keuntungan: trx.keuntungan,
+        deletedAt: trx.deletedAt, // optional biar frontend tau status
       })),
       statistik: {
         totalTransaksi: transaksiHarian.length,
@@ -138,49 +207,62 @@ export const getJualanVoucherHarian = async () => {
     throw new Error("Gagal mengambil data transaksi hari ini");
   }
 };
-
 // Helper: dapatkan rentang tanggal berdasarkan periode
 
 export const getAllTransaksiVoucher = async ({
   page = 1,
   pageSize = 10,
-  periode = "semua", // "harian", "mingguan", "bulanan", "custom", "semua"
+  periode = "semua",
   startDate,
   endDate,
-  search, // untuk nama voucher
+  search,
   brand,
+  deletedFilter = "active", // 🔥 tambahan
+  idToko,
 }) => {
   try {
-    // Validasi pagination
-    const take = Math.max(1, Math.min(Number(pageSize), 100)); // max 100 per halaman
+    const take = Math.max(1, Math.min(Number(pageSize), 100));
     const skip = (Math.max(1, Number(page)) - 1) * take;
 
-    // Dapatkan rentang tanggal
     const { start: dateStart, end: dateEnd } = getDateRange(
       periode,
       startDate,
       endDate
     );
 
-    // Bangun kondisi where untuk transaksi
+    // 🔥 Build where dasar
     const where = {
       createdAt: {
         gte: dateStart,
         lte: dateEnd,
       },
-      ...(search && {
-        Voucher: {
-          nama: { contains: search, mode: "insensitive" },
-        },
-      }),
-      ...(brand && {
-        Voucher: {
-          brand: { contains: brand, mode: "insensitive" },
-        },
-      }),
+      idToko,
     };
 
-    // Ambil data transaksi
+    // 🔥 Flexible deletedAt
+    if (deletedFilter === "active") {
+      where.deletedAt = null;
+    } else if (deletedFilter === "deleted") {
+      where.deletedAt = { not: null };
+    }
+
+    // 🔥 Fix: gabung filter Voucher dengan benar
+    if (search || brand) {
+      where.Voucher = {};
+      if (search) {
+        where.Voucher.nama = {
+          contains: search,
+          mode: "insensitive",
+        };
+      }
+      if (brand) {
+        where.Voucher.brand = {
+          contains: brand,
+          mode: "insensitive",
+        };
+      }
+    }
+
     const [transaksi, total] = await Promise.all([
       prisma.transaksiVoucherHarian.findMany({
         where,
@@ -196,8 +278,8 @@ export const getAllTransaksiVoucher = async ({
           },
         },
         orderBy: { createdAt: "desc" },
-        // skip,
-        // take,
+        skip,
+        take,
       }),
       prisma.transaksiVoucherHarian.count({ where }),
     ]);
@@ -213,6 +295,7 @@ export const getAllTransaksiVoucher = async ({
         },
         hargaJual: trx.Voucher.hargaEceran,
         keuntungan: trx.keuntungan,
+        deletedAt: trx.deletedAt, // optional biar frontend tahu status
       })),
       meta: {
         page: Number(page),
@@ -267,6 +350,7 @@ const getDateRange = (periode, startDate = null, endDate = null) => {
   }
   return { start, end };
 };
+
 export const getLaporanVoucherTerlaris = async ({
   periode = "semua",
   startDate,
@@ -275,6 +359,7 @@ export const getLaporanVoucherTerlaris = async ({
   brand,
   page = 1,
   pageSize = 10,
+  idToko,
 }) => {
   try {
     const { start: dateStart, end: dateEnd } = getDateRange(
@@ -296,6 +381,8 @@ export const getLaporanVoucherTerlaris = async ({
           gte: dateStart,
           lte: dateEnd,
         },
+        idToko,
+        deletedAt: null,
       },
       _count: { id: true },
       _sum: { keuntungan: true },
@@ -367,12 +454,16 @@ export const getLaporanVoucherTerlaris = async ({
         const v = voucherMap[g.idVoucher];
         const jumlahTerjual = g._count.id;
         const totalKeuntungan = g._sum.keuntungan ?? 0;
+        const hargaModal = v.hargaModal;
+        const hargaEceran = v.hargaEceran;
         const totalPendapatan = jumlahTerjual * (v.hargaEceran ?? 0);
         const modal = jumlahTerjual * (v.hargaPokok ?? 0);
 
         return {
           voucher: v,
           jumlahTerjual,
+          hargaModal,
+          hargaEceran,
           totalKeuntungan,
           totalPendapatan,
           modal,

@@ -15,6 +15,7 @@ export const getAllAcc = async ({
   updatedEnd, // frontend kirim "updatedAt", kita map ke "updateAt"
   sortBy = "createdAt",
   sortOrder = "desc",
+  idToko,
 }) => {
   try {
     const skip = (Number(page) - 1) * Number(pageSize);
@@ -22,6 +23,12 @@ export const getAllAcc = async ({
 
     // Build WHERE
     const where = {};
+    if (!idToko) {
+      throw new Error("Toko tidak ditemukan");
+    }
+
+    where.idToko = idToko;
+    where.isActive = true;
 
     // Search di nama atau brand
     if (search) {
@@ -151,162 +158,222 @@ export const getAllAcc = async ({
   }
 };
 
-// -------------------------
-// CREATE
-// -------------------------
-export const createAcc = async (data, user) => {
-  const {
-    barcode,
-    nama,
-    kategori,
-    brand,
-    stok,
-    hargaModal,
-    hargaJual,
-    penempatan,
-  } = data;
-
-  // Validasi wajib
-  if (
-    !nama ||
-    !brand ||
-    stok == null ||
-    hargaModal == null ||
-    hargaJual == null
-  ) {
-    throw new Error("Field wajib tidak lengkap");
-  }
-
-  await prisma.aksesoris.create({
-    data: {
-      barcode,
-      nama,
-      kategori,
-      penempatan,
-      brand,
-      stok: Number(stok),
-      hargaModal: Number(hargaModal),
-      hargaJual: Number(hargaJual),
-    },
-  });
-
-  await createLog({
-    kategori: "Aksesoris",
-    keterangan: "Membuat Aksesoris Baru",
-    nama: user.nama,
-  });
-};
-
-// -------------------------
-// GET ONE
-// -------------------------
 export const getAccById = async (id) => {
   const Acc = await prisma.aksesoris.findUnique({
-    where: { id },
+    where: { id, isActive: true },
   });
   if (!Acc) throw new Error("Acc tidak ditemukan");
   return Acc;
 };
 
-// -------------------------
-// UPDATE
-// -------------------------
-export const updateAcc = async (id, data, user) => {
-  const { barcode, nama, kategori, brand, stok, hargaModal, hargaJual } = data;
+/* =========================
+   CREATE AKSESORIS
+========================= */
+export const createAcc = async (data, user) => {
+  try {
+    const {
+      barcode,
+      nama,
+      kategori,
+      brand,
+      stok,
+      hargaModal,
+      hargaJual,
+      penempatan,
+    } = data;
 
-  const acc = await prisma.aksesoris.update({
-    where: { id },
-    data: {
-      ...(barcode !== undefined && { barcode }),
-      ...(nama !== undefined && { nama }),
-      ...(kategori !== undefined && { kategori }),
-      ...(brand !== undefined && { brand }),
-      ...(stok !== undefined && { stok: Number(stok) }),
-      ...(hargaModal !== undefined && { hargaModal: Number(hargaModal) }),
-      ...(hargaJual !== undefined && { hargaJual: Number(hargaJual) }),
-      updatedAt: new Date(),
-    },
-  });
-
-  await createLog({
-    kategori: "Aksesoris",
-    keterangan: `Mengupdate Aksesoris ${nama} menjadi ${acc.nama}  `,
-    nama: user.nama,
-  });
-};
-
-// -------------------------
-// DELETE
-// -------------------------
-export const deleteAcc = async (id, user) => {
-  const acc = await prisma.aksesoris.findUnique({
-    where: { id },
-  });
-
-  if (!acc) {
-    throw new Error("Aksesoris tidak ditemukan");
-  }
-  await prisma.aksesoris.delete({
-    where: { id },
-  });
-  await createLog({
-    kategori: "Aksesoris",
-    keterangan: `Menghapus Aksesoris ${acc.nama}  `,
-    nama: user.nama,
-  });
-};
-
-export const updateAccStok = async (id, { tipe, stok }, user) => {
-  // Validasi
-  if (!["tambah", "kurang"].includes(tipe)) {
-    console.log(tipe);
-
-    throw new Error("Tipe harus 'tambah' atau 'kurang'");
-  }
-  if (typeof stok !== "number" || stok <= 0) {
-    throw new Error("Stok harus angka positif");
-  }
-
-  return await prisma.$transaction(async (tx) => {
-    // Ambil data saat ini
-    const current = await tx.aksesoris.findUnique({
-      where: { id },
-      select: { stok: true },
-    });
-    if (!current) throw new Error("Acc tidak ditemukan");
-
-    let newStok;
-    if (tipe === "tambah") {
-      newStok = current.stok + stok;
-    } else {
-      newStok = current.stok - stok;
-      if (newStok < 0) {
-        throw new Error("Stok tidak boleh minus");
-      }
+    if (
+      !nama ||
+      !brand ||
+      stok == null ||
+      hargaModal == null ||
+      hargaJual == null
+    ) {
+      throw new Error("Field wajib tidak lengkap");
     }
 
-    // Update stok dan updateAt
-    const updated = await tx.aksesoris.update({
-      where: { id },
-      data: {
-        stok: newStok,
-        updatedAt: new Date(), // ⚠️ sesuai model: updateAt
-      },
-    });
+    return await prisma.$transaction(async (tx) => {
+      const acc = await tx.aksesoris.create({
+        data: {
+          barcode,
+          idToko: user.toko_id,
+          nama,
+          kategori,
+          penempatan,
+          brand,
+          stok: Number(stok),
+          hargaModal: Number(hargaModal),
+          hargaJual: Number(hargaJual),
+        },
+      });
 
-    await createLog({
-      kategori: "Aksesoris",
-      keterangan: ` Stok Aksesoris ${updated.nama} telah di ${tipe} ${stok} pcs `,
-      nama: user.nama,
-    });
+      await createLog(
+        {
+          kategori: "Aksesoris",
+          keterangan: `${user.nama} Membuat Aksesoris Baru ${nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
 
-    return updated;
-  });
+      return acc;
+    });
+  } catch (error) {
+    console.error("Error createAcc:", error);
+    throw new Error("Gagal membuat aksesoris");
+  }
 };
 
-export const aksesorisMaster = async () => {
+/* =========================
+   UPDATE AKSESORIS
+========================= */
+export const updateAcc = async (id, data, user) => {
   try {
-    return await prisma.aksesoris.findMany({});
+    return await prisma.$transaction(async (tx) => {
+      const { barcode, nama, kategori, brand, stok, hargaModal, hargaJual } =
+        data;
+
+      const acc = await tx.aksesoris.update({
+        where: { id },
+        data: {
+          ...(barcode !== undefined && { barcode }),
+          ...(nama !== undefined && { nama }),
+          ...(kategori !== undefined && { kategori }),
+          ...(brand !== undefined && { brand }),
+          ...(stok !== undefined && { stok: Number(stok) }),
+          ...(hargaModal !== undefined && { hargaModal: Number(hargaModal) }),
+          ...(hargaJual !== undefined && { hargaJual: Number(hargaJual) }),
+          updatedAt: new Date(),
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Aksesoris",
+          keterangan: `${user.nama} Mengupdate Aksesoris menjadi ${acc.nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return acc;
+    });
+  } catch (error) {
+    console.error("Error updateAcc:", error);
+    throw new Error("Gagal mengupdate aksesoris");
+  }
+};
+
+/* =========================
+   DELETE AKSESORIS (SOFT DELETE)
+========================= */
+export const deleteAcc = async (id, user) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const acc = await tx.aksesoris.findUnique({
+        where: { id },
+      });
+
+      if (!acc) {
+        throw new Error("Aksesoris tidak ditemukan");
+      }
+
+      await tx.aksesoris.update({
+        where: { id },
+        data: {
+          isActive: false,
+          updatedAt: new Date(),
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Aksesoris",
+          keterangan: `${user.nama} Menghapus Aksesoris ${acc.nama}`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return true;
+    });
+  } catch (error) {
+    console.error("Error deleteAcc:", error);
+    throw new Error("Gagal menghapus aksesoris");
+  }
+};
+
+/* =========================
+   UPDATE STOK
+========================= */
+export const updateAccStok = async (id, { tipe, stok }, user) => {
+  try {
+    if (!["tambah", "kurang"].includes(tipe)) {
+      throw new Error("Tipe harus 'tambah' atau 'kurang'");
+    }
+
+    if (typeof stok !== "number" || stok <= 0) {
+      throw new Error("Stok harus angka positif");
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      const current = await tx.aksesoris.findUnique({
+        where: { id },
+        select: { stok: true, nama: true },
+      });
+
+      if (!current) {
+        throw new Error("Aksesoris tidak ditemukan");
+      }
+
+      let newStok;
+
+      if (tipe === "tambah") {
+        newStok = current.stok + stok;
+      } else {
+        newStok = current.stok - stok;
+        if (newStok < 0) {
+          throw new Error("Stok tidak boleh minus");
+        }
+      }
+
+      const updated = await tx.aksesoris.update({
+        where: { id },
+        data: {
+          stok: newStok,
+          updatedAt: new Date(),
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Aksesoris",
+          keterangan: `${user.nama} ${tipe} stok aksesoris ${current.nama} sebanyak ${stok} pcs`,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return updated;
+    });
+  } catch (error) {
+    console.error("Error updateAccStok:", error);
+    throw new Error("Gagal mengupdate stok aksesoris");
+  }
+};
+
+export const aksesorisMaster = async (user) => {
+  try {
+    return await prisma.aksesoris.findMany({
+      where: {
+        idToko: user.toko_id,
+        isActive: true,
+      },
+    });
   } catch (error) {
     console.log(error);
 

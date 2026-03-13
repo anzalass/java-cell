@@ -6,12 +6,13 @@ import {
   createMember,
   updateMember,
   deleteMember,
+  getTrxMember,
 } from "../service/memberService.js";
 
 // ─── 1. GET /api/v1/members ───────────────────────────────────────────
 export const getAllMembersHandler = async (req, res) => {
   try {
-    const members = await getAllMembers();
+    const members = await getAllMembers(req.user);
     res.status(200).json({
       success: true,
       data: members,
@@ -47,6 +48,7 @@ export const getMembersWithFilterHandler = async (req, res) => {
       sortOrder,
       minTotalTransaksi,
       maxTotalTransaksi,
+      idToko: req.user.toko_id,
     });
 
     res.status(200).json({
@@ -54,7 +56,6 @@ export const getMembersWithFilterHandler = async (req, res) => {
       data: result.data,
       meta: result.meta,
       totalMember: result.totalMember,
-      totalTrx: result.totalTransaksi._sum,
       message: "Berhasil mengambil member dengan filter",
     });
   } catch (error) {
@@ -91,6 +92,30 @@ export const getMemberByIdHandler = async (req, res) => {
   }
 };
 
+export const getTrxMemberByIdHandler = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const member = await getTrxMember(id);
+    res.status(200).json({
+      success: true,
+      data: member,
+      message: "Berhasil mengambil Transaksi member",
+    });
+  } catch (error) {
+    console.error("Error di getMemberByIdHandler:", error);
+    if (error.message === "Member tidak ditemukan") {
+      return res.status(404).json({
+        success: false,
+        message: error.message,
+      });
+    }
+    res.status(500).json({
+      success: false,
+      message: error.message || "Terjadi kesalahan",
+    });
+  }
+};
+
 // ─── 4. POST /api/v1/members ──────────────────────────────────────────
 export const createMemberHandler = async (req, res) => {
   try {
@@ -103,11 +128,14 @@ export const createMemberHandler = async (req, res) => {
       });
     }
 
-    const newMember = await createMember({
-      nama,
-      noTelp,
-      totalTransaksi: parseInt(totalTransaksi) || 0,
-    });
+    const newMember = await createMember(
+      {
+        nama,
+        noTelp,
+        idToko: req.user.toko_id,
+      },
+      req.user
+    );
 
     res.status(201).json({
       success: true,
@@ -129,12 +157,17 @@ export const updateMemberHandler = async (req, res) => {
     const { id } = req.params;
     const { nama, noTelp, totalTransaksi } = req.body;
 
-    const updatedMember = await updateMember(id, {
-      nama,
-      noTelp,
-      totalTransaksi:
-        totalTransaksi !== undefined ? parseInt(totalTransaksi) : undefined,
-    });
+    const updatedMember = await updateMember(
+      id,
+      {
+        nama,
+        noTelp,
+        totalTransaksi:
+          totalTransaksi !== undefined ? parseInt(totalTransaksi) : undefined,
+        idToko: req.user.toko_id,
+      },
+      req.user
+    );
 
     res.status(200).json({
       success: true,
@@ -160,7 +193,7 @@ export const updateMemberHandler = async (req, res) => {
 export const deleteMemberHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await deleteMember(id);
+    const result = await deleteMember(id, req.user);
     res.status(200).json({
       success: true,
       message: result.message,

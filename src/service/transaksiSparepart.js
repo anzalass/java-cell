@@ -1,122 +1,205 @@
 // src/services/transaksiAksesoris.service.js
 import { PrismaClient } from "@prisma/client";
 import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
+import { createLog } from "./logService.js";
 
 const prisma = new PrismaClient();
 
-// CREATE
-export const createTransaksiSparepart = async ({
-  items,
-  nama,
-  keuntungan,
-  status = "selesai",
-  penempatan,
-  idUser,
-  idMember,
-}) => {
-  console.log(items);
-
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    throw new Error("Item transaksi tidak boleh kosong");
-  }
-
-  const generateRandomCode = (length = 8) => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    let result = "";
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  };
-
-  const namaRandom = generateRandomCode();
-
-  return await prisma.$transaction(async (tx) => {
-    let totalHarga = 0;
-    const itemsToCreate = [];
-
-    for (const item of items) {
-      const { idSparepart, quantity } = item;
-
-      if (!idSparepart || !quantity || quantity <= 0) {
-        throw new Error("Item tidak valid: idSparepart dan quantity wajib");
-      }
-
-      const sparePart = await tx.sparePart.findUnique({
-        where: { id: idSparepart },
-        select: { id: true, nama: true, stok: true, hargaJual: true },
-      });
-
-      if (!sparePart) {
-        throw new Error(`sparePart dengan ID ${idSparepart} tidak ditemukan`);
-      }
-      if (sparePart.stok < quantity) {
-        throw new Error(`Stok ${sparePart.nama} tidak mencukupi`);
-      }
-
-      totalHarga += sparePart.hargaJual * quantity;
-      itemsToCreate.push({ idSparepart, quantity });
+export const createTransaksiSparepart = async (
+  { items, nama, keuntungan, idMember },
+  user
+) => {
+  try {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error("Item transaksi tidak boleh kosong");
     }
 
-    const today = new Date();
-    const tanggal = today.toISOString().split("T")[0];
+    const generateRandomCode = (length = 8) => {
+      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      return Array.from(
+        { length },
+        () => chars[Math.floor(Math.random() * chars.length)]
+      ).join("");
+    };
 
-    const transaksi = await tx.transaksiSparepat.create({
-      data: {
-        totalHarga,
-        namaPembeli: nama ? nama : namaRandom,
-        penempatan,
-        idUser,
-        idMember,
-        keuntungan: keuntungan,
-        tanggal: new Date(`${tanggal}T00:00:00Z`),
-      },
-    });
+    return await prisma.$transaction(async (tx) => {
+      let totalHarga = 0;
 
-    let memberId = null;
+      const sparepartIds = items.map((i) => i.idSparepart);
 
-    if (idMember) {
-      memberId = await tx.member.findUnique({
+      const sparepartList = await tx.sparePart.findMany({
         where: {
-          id: idMember,
+          id: { in: sparepartIds },
         },
         select: {
           id: true,
+          nama: true,
+          stok: true,
+          hargaJual: true,
         },
       });
-    }
 
-    for (const item of itemsToCreate) {
-      await tx.sparePart.update({
-        where: { id: item.idSparepart },
-        data: { stok: { decrement: item.quantity } },
-      });
+      const sparepartMap = Object.fromEntries(
+        sparepartList.map((s) => [s.id, s])
+      );
 
-      await tx.itemsTransaksiSparepart.create({
+      for (const item of items) {
+        const { idSparepart, quantity } = item;
+
+        if (!idSparepart || !quantity || quantity <= 0) {
+          throw new Error("Item tidak valid");
+        }
+
+        const sparepart = sparepartMap[idSparepart];
+
+        if (!sparepart) {
+          throw new Error("Sparepart tidak ditemukan");
+        }
+
+        if (sparepart.stok < quantity) {
+          throw new Error(`Stok ${sparepart.nama} tidak mencukupi`);
+        }
+
+        totalHarga += sparepart.hargaJual * quantity;
+      }
+
+      let member = null;
+
+      if (idMember) {
+        member = await tx.member.findUnique({
+          where: { id: idMember },
+          select: { id: true, nama: true },
+        });
+      }
+
+      const transaksi = await tx.transaksiSparepat.create({
         data: {
-          idTransaksi: transaksi.id,
-          idSparepart: item.idSparepart,
-          quantity: item.quantity,
-          tanggal: new Date(`${tanggal}T00:00:00Z`),
-        },
-      });
-    }
+          totalHarga,
+          keuntungan,
+          namaPembeli: member?.nama || nama || generateRandomCode(),
+          tanggal: new Date(),
 
-    if (memberId) {
-      await tx.member.update({
-        where: {
-          id: idMember, // pastikan `noTelp` unique!
-        },
-        data: {
-          totalTransaksi: {
-            increment: keuntungan, // ✅ Tambahkan nilai ini
+          Toko: {
+            connect: {
+              id: user.toko_id,
+            },
+          },
+          ...(member && {
+            Member: {
+              connect: { id: member.id },
+            },
+          }),
+
+          items: {
+            create: items.map((item) => ({
+              quantity: item.quantity,
+              tanggal: new Date(),
+              Toko: {
+                connect: {
+                  id: user.toko_id,
+                },
+              },
+              Sparepart: {
+                connect: { id: item.idSparepart },
+              },
+            })),
           },
         },
       });
-    }
 
-    return { id: transaksi.id, totalHarga };
-  });
+      for (const item of items) {
+        await tx.sparePart.update({
+          where: { id: item.idSparepart },
+          data: {
+            stok: { decrement: item.quantity },
+          },
+        });
+      }
+
+      await createLog(
+        {
+          kategori: "Transaksi Sparepart",
+          keterangan: `${user.nama} membuat transaksi sparepart`,
+          nominal: transaksi.keuntungan,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return {
+        id: transaksi.id,
+        totalHarga,
+      };
+    });
+  } catch (error) {
+    console.error("Error createTransaksiSparepart:", error);
+
+    throw new Error(
+      error.message || "Terjadi kesalahan saat membuat transaksi sparepart"
+    );
+  }
+};
+
+export const deleteTransaksiSparepart = async (idTransaksi, user) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const transaksi = await tx.transaksiSparepat.findUnique({
+        where: { id: idTransaksi },
+        include: { items: true },
+      });
+
+      if (!transaksi) {
+        throw new Error("Transaksi tidak ditemukan");
+      }
+
+      for (const item of transaksi.items) {
+        await tx.sparePart.update({
+          where: { id: item.idSparepart },
+          data: {
+            stok: { increment: item.quantity },
+          },
+        });
+      }
+
+      const now = new Date();
+
+      await tx.transaksiSparepat.update({
+        where: { id: idTransaksi },
+        data: {
+          deletedAt: now,
+        },
+      });
+
+      await tx.itemsTransaksiSparepart.updateMany({
+        where: {
+          idTransaksi,
+        },
+        data: {
+          deletedAt: now,
+        },
+      });
+
+      await createLog(
+        {
+          kategori: "Transaksi Sparepart",
+          keterangan: `${user.nama} menghapus transaksi sparepart`,
+          nominal: transaksi.keuntungan,
+          nama: user.nama,
+          idToko: user.toko_id,
+        },
+        tx
+      );
+
+      return { success: true };
+    });
+  } catch (error) {
+    console.error("Error deleteTransaksiSparepart:", error);
+
+    throw new Error(
+      error.message || "Terjadi kesalahan saat menghapus transaksi sparepart"
+    );
+  }
 };
 
 // ✅ GET ALL dengan filter & pagination
@@ -127,25 +210,40 @@ export const getAllTransaksiSparepart = async ({
   startDate,
   endDate,
   status,
+  idToko,
+  deletedFilter = "active", // ✅ tambahan
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
 
-  const where = {};
+  const where = {
+    idToko,
+  };
 
-  // Filter pencarian (namaPembeli)
+  // ✅ Flexible deleted filter
+  if (deletedFilter === "active") {
+    where.deletedAt = null;
+  } else if (deletedFilter === "deleted") {
+    where.deletedAt = { not: null };
+  }
+  // kalau "all" → tidak difilter
+
+  // 🔍 Search
   if (search) {
-    where.namaPembeli = { contains: search, mode: "insensitive" };
+    where.namaPembeli = {
+      contains: search,
+      mode: "insensitive",
+    };
   }
 
-  // Filter tanggal
+  // 📅 Filter tanggal
   if (startDate || endDate) {
     where.tanggal = {};
     if (startDate) where.tanggal.gte = new Date(startDate);
     if (endDate) where.tanggal.lte = new Date(endDate);
   }
 
-  // Filter status
+  // 📌 Filter status
   if (status) {
     where.status = status;
   }
@@ -153,14 +251,18 @@ export const getAllTransaksiSparepart = async ({
   const [data, total] = await prisma.$transaction([
     prisma.transaksiSparepat.findMany({
       where,
-      // skip,
-      // take,
+      skip,
+      take,
       orderBy: { tanggal: "desc" },
       include: {
         items: {
           include: {
             Sparepart: {
-              select: { nama: true, hargaModal: true, hargaJual: true },
+              select: {
+                nama: true,
+                hargaModal: true,
+                hargaJual: true,
+              },
             },
           },
         },
@@ -169,11 +271,10 @@ export const getAllTransaksiSparepart = async ({
     prisma.transaksiSparepat.count({ where }),
   ]);
 
-  // Format data untuk frontend
   const formatted = data.map((trx) => {
     const totalKeuntungan = trx.items.reduce((sum, item) => {
-      const modal = item.Sparepart.hargaModal || 0;
-      const jual = item.Sparepart.hargaJual || 0;
+      const modal = item.Sparepart?.hargaModal || 0;
+      const jual = item.Sparepart?.hargaJual || 0;
       return sum + item.quantity * (jual - modal);
     }, 0);
 
@@ -181,15 +282,17 @@ export const getAllTransaksiSparepart = async ({
       id: trx.id,
       namaPembeli: trx.namaPembeli,
       totalHarga: trx.totalHarga,
-      keuntungan: trx.keuntungan || totalKeuntungan,
-      tanggal: trx.tanggal.toISOString().split("T")[0],
+      keuntungan: trx.keuntungan ?? totalKeuntungan,
+      status: trx.status,
+      deletedAt: trx.deletedAt,
+      tanggal: trx.createdAt,
       detail: {
         itemTransaksi: trx.items.map((item) => ({
           id: item.id,
-          namaProduk: item.Sparepart.nama,
+          namaProduk: item.Sparepart?.nama,
           qty: item.quantity,
-          hargaJual: item.Sparepart.hargaJual || 0,
-          hargaModal: item.Sparepart.hargaModal || 0,
+          hargaJual: item.Sparepart?.hargaJual || 0,
+          hargaModal: item.Sparepart?.hargaModal || 0,
         })),
       },
     };
@@ -204,41 +307,6 @@ export const getAllTransaksiSparepart = async ({
       totalPages: Math.ceil(total / take),
     },
   };
-};
-
-// ✅ DELETE (rollback stok)
-export const deleteTransaksiSparepart = async (idTransaksi) => {
-  return await prisma.$transaction(async (tx) => {
-    // Cari transaksi
-    const transaksi = await tx.transaksiSparepat.findUnique({
-      where: { id: idTransaksi },
-      include: { items: true },
-    });
-
-    if (!transaksi) {
-      throw new Error("Transaksi tidak ditemukan");
-    }
-
-    // Kembalikan stok untuk setiap item
-    for (const item of transaksi.items) {
-      await tx.sparePart.update({
-        where: { id: item.idSparepart },
-        data: { stok: { increment: item.quantity } },
-      });
-    }
-
-    // Hapus items terlebih dahulu
-    await tx.itemsTransaksiSparepart.deleteMany({
-      where: { idTransaksi },
-    });
-
-    // Hapus transaksi utama
-    await tx.transaksiSparepat.delete({
-      where: { id: idTransaksi },
-    });
-
-    return { success: true };
-  });
 };
 
 const getDateRange = (period, startDate, endDate) => {
@@ -289,6 +357,7 @@ export const getLaporanBarangKeluar = async ({
   endDate,
   searchNama = "",
   sortQty = "none",
+  idToko,
 }) => {
   const skip = (Number(page) - 1) * Number(pageSize);
   const take = Number(pageSize);
@@ -298,6 +367,8 @@ export const getLaporanBarangKeluar = async ({
   // ✅ 1. Ambil data dari ItemsTransaksiSparepart
   const whereSparepart = {
     tanggal: { gte: start, lte: end },
+    deletedAt: null,
+    idToko: idToko,
     ...(searchNama && {
       Sparepart: { nama: { contains: searchNama, mode: "insensitive" } },
     }),
@@ -318,6 +389,7 @@ export const getLaporanBarangKeluar = async ({
     ...(searchNama && {
       Sparepart: { nama: { contains: searchNama, mode: "insensitive" } },
     }),
+    deletedAt: null,
   };
 
   const itemsService = await prisma.sparepartServiceHP.findMany({
@@ -353,11 +425,16 @@ export const getLaporanBarangKeluar = async ({
         hargaModal: item.Sparepart.hargaModal,
         hargaJual: item.Sparepart.hargaJual,
         qty: 0,
+        modal: 0, // field baru
+        keuntungan: 0,
         sumber: [], // Lacak sumber data
       };
     }
 
     acc[key].qty += item.quantity;
+    acc[key].modal += item.Sparepart.hargaModal * item.quantity;
+    acc[key].keuntungan +=
+      (item.Sparepart.hargaJual - item.Sparepart.hargaModal) * item.quantity;
     acc[key].sumber.push(item.sumber);
 
     return acc;
@@ -387,5 +464,36 @@ export const getLaporanBarangKeluar = async ({
       total: totalCount,
       totalPages: Math.ceil(totalCount / take),
     },
+  };
+};
+
+export const getDetailTransaksiSparepart = async (id, user) => {
+  const transaksi = await prisma.transaksiSparepat.findUnique({
+    where: { id },
+    include: {
+      Member: true,
+      items: {
+        include: {
+          Sparepart: true,
+        },
+      },
+    },
+  });
+
+  if (!transaksi) {
+    throw new Error("Transaksi tidak ditemukan");
+  }
+  const toko = await prisma.toko.findUnique({
+    where: {
+      id: user.toko_id,
+    },
+  });
+
+  return {
+    namaToko: toko.namaToko,
+    logoToko: toko.logoToko,
+    alamat: toko.alamat,
+    noTelp: toko.noTelp,
+    transaksi,
   };
 };

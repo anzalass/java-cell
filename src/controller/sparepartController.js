@@ -10,7 +10,7 @@ import {
 // GET /api/spareparts
 export const getAllSparePartsHandler = async (req, res) => {
   try {
-    const result = await getAllSpareParts(req.query);
+    const result = await getAllSpareParts(req.query, req.user);
     res.json(result);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -40,7 +40,7 @@ export const getSparePartHandler = async (req, res) => {
 // PUT /api/spareparts/:id
 export const updateSparePartHandler = async (req, res) => {
   try {
-    const sparePart = await updateSparePart(req.params.id, req.body);
+    const sparePart = await updateSparePart(req.params.id, req.body, req.user);
     res.json(sparePart);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -50,7 +50,7 @@ export const updateSparePartHandler = async (req, res) => {
 // DELETE /api/spareparts/:id
 export const deleteSparePartHandler = async (req, res) => {
   try {
-    await deleteSparePart(req.params.id);
+    await deleteSparePart(req.params.id, req.user);
     res.status(204).end(); // No Content
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -78,10 +78,14 @@ export const updateSparePartStokHandler = async (req, res) => {
       return res.status(400).json({ error: "Stok harus berupa angka" });
     }
 
-    const updated = await updateSparePartStok(id, {
-      tipe,
-      stok: stokNum,
-    });
+    const updated = await updateSparePartStok(
+      id,
+      {
+        tipe,
+        stok: stokNum,
+      },
+      req.user
+    );
 
     res.json(updated);
   } catch (error) {
@@ -92,7 +96,7 @@ export const updateSparePartStokHandler = async (req, res) => {
 
 export const getSparepartMaster = async (req, res) => {
   try {
-    const data = await sparePartMaster();
+    const data = await sparePartMaster(req.user);
     return res.status(200).json(data);
   } catch (error) {
     console.error(error);

@@ -9,7 +9,11 @@ import {
   loginController2,
   logoutHandler,
 } from "../controller/authController.js";
-import { AuthMiddleware2, AuthMiddleware } from "../utils/authMiddleware.js";
+import {
+  AuthMiddleware2,
+  AuthMiddleware,
+  hasRole,
+} from "../utils/authMiddleware.js";
 
 const router = Router();
 
@@ -17,16 +21,31 @@ const router = Router();
 router.get("/auth", AuthMiddleware, getAllUsersHandler);
 
 // GET user by ID
-router.get("/auth:id", AuthMiddleware, getUserByIdHandler);
+router.get("/auth/:id", AuthMiddleware, getUserByIdHandler);
 
 // CREATE user
-router.post("/auth", createUserHandler);
+router.post(
+  "/auth",
+  AuthMiddleware,
+  hasRole("Super Admin", "Owner"),
+  createUserHandler
+);
 
 // UPDATE user
-router.put("/auth/:id", AuthMiddleware, updateUserHandler);
+router.put(
+  "/auth/:id",
+  AuthMiddleware,
+  hasRole("Super Admin", "Owner"),
+  updateUserHandler
+);
 
 // DELETE user
-router.delete("/auth/:id", AuthMiddleware, deleteUserHandler);
+router.delete(
+  "/auth/:id",
+  AuthMiddleware,
+  hasRole("Super Admin", "Owner"),
+  deleteUserHandler
+);
 router.get("/me", AuthMiddleware2);
 router.post("/auth/logout", logoutHandler);
 

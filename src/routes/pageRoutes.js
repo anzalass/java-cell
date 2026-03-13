@@ -3,6 +3,7 @@ const router = express.Router();
 import { AuthMiddleware } from "../utils/authMiddleware.js";
 import {
   cariAksesorisController,
+  cariNoPelangganController,
   cariSparepartController,
   cariVoucherController,
   dashboardAdminPageController,
@@ -30,6 +31,7 @@ router.get("/service-hp", AuthMiddleware, serviceHPAdminPageController);
 router.get("/cari-sparepart", AuthMiddleware, cariSparepartController);
 router.get("/cari-voucher", AuthMiddleware, cariVoucherController);
 router.get("/cari-acc", AuthMiddleware, cariAksesorisController);
+router.get("/cari-no-pelanggan", AuthMiddleware, cariNoPelangganController);
 
 router.get("/dashboard2", AuthMiddleware, getDashboardData);
 
