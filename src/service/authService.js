@@ -246,6 +246,8 @@ export const login = async (auth) => {
       toko_id: toko.id,
     };
   } catch (error) {
+    console.log(error);
+
     if (error instanceof Error) {
       throw error;
     }
