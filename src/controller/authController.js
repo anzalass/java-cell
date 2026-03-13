@@ -90,19 +90,19 @@ export const loginController2 = async (req, res) => {
     const result = await login(req.body);
 
     // Simpan token di cookie (HTTP-only)
-    // res.cookie("auth_token", result.token, {
-    //   httpOnly: true,
-    //   secure: process.env.NODE_ENV === "production",
-    //   sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax", // ✅
-    //   maxAge: 3 * 24 * 60 * 60 * 1000,
-    // });
-
     res.cookie("auth_token", result.token, {
       httpOnly: true,
-      secure: true, // WAJIB karena HTTPS
-      sameSite: "none", // ✅ WAJIB cross-site
-      maxAge: 5 * 24 * 60 * 60 * 1000,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax", // ✅
+      maxAge: 3 * 24 * 60 * 60 * 1000,
     });
+
+    // res.cookie("auth_token", result.token, {
+    //   httpOnly: true,
+    //   secure: true, // WAJIB karena HTTPS
+    //   sameSite: "none", // ✅ WAJIB cross-site
+    //   maxAge: 5 * 24 * 60 * 60 * 1000,
+    // });
 
     return res.status(200).json({
       message: "Login berhasil",
