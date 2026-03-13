@@ -10,28 +10,28 @@ function randomNumber(min, max) {
 async function main() {
   const passwordHash = await bcrypt.hash("admin123", 10);
 
-  // Buat toko
-  //   const toko = await prisma.toko.create({
-  //     data: {
-  //       namaToko: "JAVA CELL",
-  //       alamat: "Indonesia",
-  //       noTelp: "628123456789",
-  //       SubscribeTime: new Date(),
-  //       isActive: true,
-  //     },
-  //   });
+  //   Buat toko
+  const toko = await prisma.toko.create({
+    data: {
+      namaToko: "JAVA CELL",
+      alamat: "Indonesia",
+      noTelp: "628123456789",
+      SubscribeTime: new Date(),
+      isActive: true,
+    },
+  });
 
-  //   // Buat user
-  //   const user = await prisma.user.create({
-  //     data: {
-  //       nama: "Super Admin",
-  //       email: "admin@javacell.com",
-  //       password: passwordHash,
-  //       role: "Super Admin",
-  //       idToko: toko.id,
-  //       isActive: true,
-  //     },
-  //   });
+  // Buat user
+  const user = await prisma.user.create({
+    data: {
+      nama: "Super Admin",
+      email: "admin@javacell.com",
+      password: passwordHash,
+      role: "Super Admin",
+      idToko: toko.id,
+      isActive: true,
+    },
+  });
 
   console.log("User & toko dibuat");
 
@@ -43,7 +43,7 @@ async function main() {
     date.setDate(date.getDate() - i);
 
     keuntunganData.push({
-      idToko: "79b59a38-ef5a-43c7-a035-8bc9f0e96db3",
+      idToko: toko.id,
       createdAt: date,
       keuntunganTransaksi: BigInt(randomNumber(10000, 200000)),
       keuntunganVoucherHarian: BigInt(randomNumber(5000, 100000)),
