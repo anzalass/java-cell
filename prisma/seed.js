@@ -11,12 +11,16 @@ async function main() {
   const passwordHash = await bcrypt.hash("admin123", 10);
 
   //   Buat toko
+
+  const now = new Date();
+  const subscribePlus7 = new Date();
+  subscribePlus7.setDate(now.getDate() + 7);
   const toko = await prisma.toko.create({
     data: {
       namaToko: "JAVA CELL",
       alamat: "Indonesia",
       noTelp: "628123456789",
-      SubscribeTime: new Date(),
+      SubscribeTime: subscribePlus7,
       isActive: true,
     },
   });
