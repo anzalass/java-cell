@@ -249,9 +249,12 @@ export const getAllServiceHP = async ({
   }
   // Filter pencarian (namaPembeli = brandHP di model)
   if (search) {
-    where.brandHP = { contains: search, mode: "insensitive" };
+    where.OR = [
+      { brandHP: { contains: search, mode: "insensitive" } },
+      { namaPelangan: { contains: search, mode: "insensitive" } },
+      { keterangan: { contains: search, mode: "insensitive" } },
+    ];
   }
-
   // Filter status
   if (status && status !== "all") {
     where.status = status;
@@ -267,8 +270,8 @@ export const getAllServiceHP = async ({
   const [data, total] = await prisma.$transaction([
     prisma.serviceHP.findMany({
       where,
-      skip,
-      take,
+      // skip,
+      // take,
       orderBy: { tanggal: "desc" },
       include: {
         Sparepart: {

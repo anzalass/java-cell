@@ -100,8 +100,8 @@ model DataMember {
       idToko String
       nama String
       nomor String
-      idMember String
-      Member        Member @relation(fields: [idMember], references: [id])
+      idMember String?
+      Member        Member? @relation(fields: [idMember], references: [id])
       Toko          Toko @relation(fields: [idToko], references: [id])
 
 }

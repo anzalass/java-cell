@@ -61,6 +61,7 @@ export const getAllSpareParts = async (
     }
 
     where.idToko = user.toko_id;
+    where.isActive = true;
 
     // ✅ SEARCH
     if (search) {
@@ -232,6 +233,8 @@ export const updateSparePart = async (id, data, user) => {
           ...(data.nama !== undefined && { nama: data.nama }),
           ...(data.kategori !== undefined && { kategori: data.kategori }),
           ...(data.brand !== undefined && { brand: data.brand }),
+          ...(data.penempatan !== undefined && { penempatan: data.penempatan }),
+
           ...(data.stok !== undefined && { stok: Number(data.stok) }),
           ...(data.hargaModal !== undefined && {
             hargaModal: Number(data.hargaModal),
@@ -275,7 +278,7 @@ export const deleteSparePart = async (id, user) => {
       const deleted = await tx.sparePart.update({
         where: { id },
         data: {
-          deletedAt: new Date(),
+          isActive: false,
         },
       });
 

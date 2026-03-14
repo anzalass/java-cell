@@ -128,7 +128,7 @@ export const updateTransaksiStatusHandler = async (req, res) => {
 export const deletePendingTransaksiHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    await deletePendingTransaksi(id);
+    await deletePendingTransaksi(id, req.user);
     res.json({ success: true });
   } catch (error) {
     console.error("Delete transaksi error:", error);

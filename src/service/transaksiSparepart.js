@@ -213,8 +213,8 @@ export const getAllTransaksiSparepart = async ({
   idToko,
   deletedFilter = "active", // ✅ tambahan
 }) => {
-  const skip = (Number(page) - 1) * Number(pageSize);
-  const take = Number(pageSize);
+  // const skip = (Number(page) - 1) * Number(pageSize);
+  // const take = Number(pageSize);
 
   const where = {
     idToko,
@@ -251,8 +251,8 @@ export const getAllTransaksiSparepart = async ({
   const [data, total] = await prisma.$transaction([
     prisma.transaksiSparepat.findMany({
       where,
-      skip,
-      take,
+      // skip,
+      // take,
       orderBy: { tanggal: "desc" },
       include: {
         items: {
@@ -300,12 +300,12 @@ export const getAllTransaksiSparepart = async ({
 
   return {
     formatted,
-    meta: {
-      page: Number(page),
-      pageSize: take,
-      total,
-      totalPages: Math.ceil(total / take),
-    },
+    // meta: {
+    //   page: Number(page),
+    //   // pageSize: take,
+    //   total,
+    //   totalPages: Math.ceil(total / take),
+    // },
   };
 };
 
