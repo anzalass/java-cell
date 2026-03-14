@@ -40,6 +40,8 @@ export const getSparePartHandler = async (req, res) => {
 // PUT /api/spareparts/:id
 export const updateSparePartHandler = async (req, res) => {
   try {
+    console.log(req.body);
+
     const sparePart = await updateSparePart(req.params.id, req.body, req.user);
     res.json(sparePart);
   } catch (error) {

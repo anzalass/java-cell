@@ -140,7 +140,7 @@ export const createGrosirOrder = async (
   }
 };
 
-export const deleteTransaksi = async (idTransaksi) => {
+export const deleteTransaksi = async (idTransaksi, user) => {
   try {
     if (!idTransaksi) {
       throw new Error("ID transaksi wajib diisi");
@@ -189,7 +189,6 @@ export const deleteTransaksi = async (idTransaksi) => {
         },
       });
 
-
       await createLog(
         {
           kategori: "Transaksi Voucher Downline",
@@ -215,7 +214,7 @@ export const deleteTransaksi = async (idTransaksi) => {
   }
 };
 
-export const deletePendingTransaksi = async (idTransaksi) => {
+export const deletePendingTransaksi = async (idTransaksi, user) => {
   try {
     if (!idTransaksi) {
       throw new Error("ID transaksi wajib diisi");

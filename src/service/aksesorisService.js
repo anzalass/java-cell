@@ -231,8 +231,16 @@ export const createAcc = async (data, user) => {
 export const updateAcc = async (id, data, user) => {
   try {
     return await prisma.$transaction(async (tx) => {
-      const { barcode, nama, kategori, brand, stok, hargaModal, hargaJual } =
-        data;
+      const {
+        barcode,
+        nama,
+        kategori,
+        brand,
+        stok,
+        hargaModal,
+        hargaJual,
+        penempatan,
+      } = data;
 
       const acc = await tx.aksesoris.update({
         where: { id },
@@ -241,6 +249,7 @@ export const updateAcc = async (id, data, user) => {
           ...(nama !== undefined && { nama }),
           ...(kategori !== undefined && { kategori }),
           ...(brand !== undefined && { brand }),
+          ...(penempatan !== undefined && { penempatan }),
           ...(stok !== undefined && { stok: Number(stok) }),
           ...(hargaModal !== undefined && { hargaModal: Number(hargaModal) }),
           ...(hargaJual !== undefined && { hargaJual: Number(hargaJual) }),
