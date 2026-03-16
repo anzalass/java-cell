@@ -49,18 +49,24 @@ model Toko {
 }
 
 model Keuntungan {
-  id                     String   @id @default(uuid())
-  idToko                 String
-  createdAt                DateTime @default(now())
-  keuntunganTransaksi    BigInt   // ✅ Bukan String!
-  keuntunganVoucherHarian BigInt
-  keuntunganAcc          BigInt
-  keuntunganSparepart    BigInt
-  keuntunganService      BigInt
-  keuntunganGrosirVoucher BigInt
-  Toko                   Toko     @relation(fields: [idToko], references: [id])
-}
+  id                       String   @id @default(uuid())
+  idToko                   String
+  tanggal                  DateTime
 
+  keuntunganTransaksi      BigInt   @default(0)
+  keuntunganVoucherHarian  BigInt   @default(0)
+  keuntunganAcc            BigInt   @default(0)
+  keuntunganSparepart      BigInt   @default(0)
+  keuntunganService        BigInt   @default(0)
+  keuntunganGrosirVoucher  BigInt   @default(0)
+
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  Toko                     Toko     @relation(fields: [idToko], references: [id])
+
+  @@unique([idToko, tanggal])
+}
 
 model User {
     id String @id @default(uuid())

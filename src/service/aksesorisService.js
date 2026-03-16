@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { createLog } from "./logService.js";
+import { toUTCFromWIBRange } from "../utils/wibMiddleware.js";
 const prisma = new PrismaClient();
 
 export const getAllAcc = async ({
@@ -62,50 +63,22 @@ export const getAllAcc = async ({
     // Filter createdAt (exact date)
     // CREATED RANGE
     if (createdStart || createdEnd) {
+      const range = toUTCFromWIBRange(createdStart, createdEnd);
+
       where.createdAt = {};
 
-      if (createdStart) {
-        const start = new Date(createdStart);
-        if (isNaN(start.getTime()))
-          throw new Error("Format createdStart tidak valid");
-
-        start.setHours(0, 0, 0, 0);
-        where.createdAt.gte = start;
-      }
-
-      if (createdEnd) {
-        const end = new Date(createdEnd);
-        if (isNaN(end.getTime()))
-          throw new Error("Format createdEnd tidak valid");
-
-        end.setHours(23, 59, 59, 999);
-        where.createdAt.lte = end;
-      }
+      if (range.gte) where.createdAt.gte = range.gte;
+      if (range.lte) where.createdAt.lte = range.lte;
     }
-
     // UPDATED RANGE
     if (updatedStart || updatedEnd) {
+      const range = toUTCFromWIBRange(updatedStart, updatedEnd);
+
       where.updatedAt = {};
 
-      if (updatedStart) {
-        const start = new Date(updatedStart);
-        if (isNaN(start.getTime()))
-          throw new Error("Format updatedStart tidak valid");
-
-        start.setHours(0, 0, 0, 0);
-        where.updatedAt.gte = start;
-      }
-
-      if (updatedEnd) {
-        const end = new Date(updatedEnd);
-        if (isNaN(end.getTime()))
-          throw new Error("Format updatedEnd tidak valid");
-
-        end.setHours(23, 59, 59, 999);
-        where.updatedAt.lte = end;
-      }
+      if (range.gte) where.updatedAt.gte = range.gte;
+      if (range.lte) where.updatedAt.lte = range.lte;
     }
-
     // Validasi sort field
     const allowedSort = [
       "barcode",

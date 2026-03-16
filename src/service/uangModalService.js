@@ -1,6 +1,7 @@
 // src/services/uangModal.service.js
 import { PrismaClient } from "@prisma/client";
 import { createLog } from "./logService.js";
+import { toUTCFromWIBRange } from "../utils/wibMiddleware.js";
 
 const prisma = new PrismaClient();
 
@@ -25,10 +26,10 @@ export const getAllUangModal = async ({
   }
 
   // Filter tanggal
-  if (startDate || endDate) {
-    where.tanggal = {};
-    if (startDate) where.tanggal.gte = new Date(startDate);
-    if (endDate) where.tanggal.lte = new Date(endDate);
+  const range = toUTCFromWIBRange(startDate, endDate);
+
+  if (Object.keys(range).length) {
+    where.tanggal = range;
   }
 
   const [data, total] = await prisma.$transaction([
@@ -69,7 +70,7 @@ export const createUangModal = async (data) => {
         data: {
           keterangan,
           idToko,
-          tanggal: new Date(tanggal),
+          tanggal: new Date(),
           jumlah: Number(jumlah),
         },
       });

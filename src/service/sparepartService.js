@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { createLog } from "./logService.js";
+import { toUTCFromWIBRange } from "../utils/wibMiddleware.js";
 const prisma = new PrismaClient();
 
 // src/services/sparepart.service.js
@@ -32,29 +33,44 @@ export const getAllSpareParts = async (
     where.isActive = true;
     where.idToko = user.toko_id;
 
-    // ✅ CREATED RANGE
+    // // ✅ CREATED RANGE
+    // if (createdStart || createdEnd) {
+    //   where.createdAt = {
+    //     ...(createdStart && {
+    //       gte: new Date(new Date(createdStart).setHours(0, 0, 0, 0)),
+    //     }),
+    //     ...(createdEnd && {
+    //       lte: new Date(new Date(createdEnd).setHours(23, 59, 59, 999)),
+    //     }),
+    //   };
+    // }
+
     if (createdStart || createdEnd) {
-      where.createdAt = {
-        ...(createdStart && {
-          gte: new Date(new Date(createdStart).setHours(0, 0, 0, 0)),
-        }),
-        ...(createdEnd && {
-          lte: new Date(new Date(createdEnd).setHours(23, 59, 59, 999)),
-        }),
-      };
+      const range = toUTCFromWIBRange(createdStart, createdEnd);
+
+      where.createdAt = {};
+      if (range.gte) where.createdAt.gte = range.gte;
+      if (range.lte) where.createdAt.lte = range.lte;
     }
 
-    // ✅ UPDATED RANGE
     if (updatedStart || updatedEnd) {
-      where.updatedAt = {
-        ...(updatedStart && {
-          gte: new Date(new Date(updatedStart).setHours(0, 0, 0, 0)),
-        }),
-        ...(updatedEnd && {
-          lte: new Date(new Date(updatedEnd).setHours(23, 59, 59, 999)),
-        }),
-      };
+      const range = toUTCFromWIBRange(updatedStart, updatedEnd);
+
+      where.updatedAt = {};
+      if (range.gte) where.updatedAt.gte = range.gte;
+      if (range.lte) where.updatedAt.lte = range.lte;
     }
+    // ✅ UPDATED RANGE
+    // if (updatedStart || updatedEnd) {
+    //   where.updatedAt = {
+    //     ...(updatedStart && {
+    //       gte: new Date(new Date(updatedStart).setHours(0, 0, 0, 0)),
+    //     }),
+    //     ...(updatedEnd && {
+    //       lte: new Date(new Date(updatedEnd).setHours(23, 59, 59, 999)),
+    //     }),
+    //   };
+    // }
 
     if (!user) {
       throw new Error("Toko tidak ditemukan");

@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { createLog } from "./logService.js";
+import { getTodayRangeWIB } from "../utils/wibMiddleware.js";
 
 const prisma = new PrismaClient();
 
@@ -134,17 +135,13 @@ export const getJualanVoucherHarian = async (
   { deletedFilter = "active" } = {}
 ) => {
   try {
-    const todayStart = new Date();
-    todayStart.setUTCHours(0, 0, 0, 0);
-
-    const todayEnd = new Date();
-    todayEnd.setUTCHours(23, 59, 59, 999);
+    const { start, end } = getTodayRangeWIB();
 
     const where = {
       idToko: user.toko_id,
       createdAt: {
-        gte: todayStart,
-        lte: todayEnd,
+        gte: start,
+        lte: end,
       },
       deletedAt: null,
     };

@@ -15,40 +15,40 @@ async function main() {
   const now = new Date();
   const subscribePlus7 = new Date();
   subscribePlus7.setDate(now.getDate() + 7);
-  const toko = await prisma.toko.create({
-    data: {
-      namaToko: "JAVA CELL",
-      alamat: "Indonesia",
-      noTelp: "628123456789",
-      SubscribeTime: subscribePlus7,
-      isActive: true,
-    },
-  });
+  //   const toko = await prisma.toko.create({
+  //     data: {
+  //       namaToko: "JAVA CELL",
+  //       alamat: "Indonesia",
+  //       noTelp: "628123456789",
+  //       SubscribeTime: subscribePlus7,
+  //       isActive: true,
+  //     },
+  //   });
 
-  // Buat user
-  const user = await prisma.user.create({
-    data: {
-      nama: "Super Admin",
-      email: "admin@javacell.com",
-      password: passwordHash,
-      role: "Super Admin",
-      idToko: toko.id,
-      isActive: true,
-    },
-  });
-
-  console.log("User & toko dibuat");
+  //   // Buat user
+  //   const user = await prisma.user.create({
+  //     data: {
+  //       nama: "Super Admin",
+  //       email: "admin@javacel2.com",
+  //       password: passwordHash,
+  //       role: "Super Admin",
+  //       idToko: toko.id,
+  //       isActive: true,
+  //     },
+  //   });
 
   // Generate 1000 data keuntungan
   const keuntunganData = [];
+  const baseDate = new Date();
+  baseDate.setHours(0, 0, 0, 0);
 
   for (let i = 0; i < 180; i++) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
+    const date = new Date(baseDate);
+    date.setDate(baseDate.getDate() - i);
 
     keuntunganData.push({
-      idToko: toko.id,
-      createdAt: date,
+      idToko: "79b59a38-ef5a-43c7-a035-8bc9f0e96db3",
+      tanggal: date,
       keuntunganTransaksi: BigInt(randomNumber(10000, 200000)),
       keuntunganVoucherHarian: BigInt(randomNumber(5000, 100000)),
       keuntunganAcc: BigInt(randomNumber(10000, 150000)),

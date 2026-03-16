@@ -1,26 +1,16 @@
 // src/services/transaksiHarian.service.js
 import { PrismaClient } from "@prisma/client";
 import { createLog } from "./logService.js";
+import { getTodayRangeWIB } from "../utils/wibMiddleware.js";
 
 const prisma = new PrismaClient();
-
-// Helper: dapatkan rentang waktu hari ini
-const getTodayRange = () => {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-
-  return { start, end };
-};
 
 // ✅ GET ALL Jualan Harian hari ini (DateTime)
 export const getJualanHarianToday = async (
   user,
   { deletedFilter = "active" } = {}
 ) => {
-  const { start, end } = getTodayRange();
+  const { start, end } = getTodayRangeWIB();
 
   const where = {
     idToko: user.toko_id,
@@ -45,7 +35,7 @@ export const getJualanHarianToday = async (
 
 // ✅ GET ALL Kejadian Tak Terduga hari ini
 export const getKejadianTakTerdugaToday = async (user) => {
-  const { start, end } = getTodayRange();
+  const { start, end } = getTodayRangeWIB();
   return await prisma.kejadianTakTerduga.findMany({
     where: {
       tanggal: {
@@ -82,13 +72,13 @@ export const createJualanHarian = async ({
               connect: { id: idMember },
             },
           }),
+          tanggal: new Date(),
           Toko: {
             connect: {
               id: idToko,
             },
           },
           nominal,
-          tanggal: new Date(),
         },
       });
 
@@ -125,13 +115,10 @@ export const deleteJualanHarian = async (id, user) => {
         throw new Error("Transaksi harian tidak ditemukan");
       }
 
-      const now = new Date();
-      const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-
       await tx.jualanHarian.update({
         where: { id },
         data: {
-          deletedAt: wib,
+          deletedAt: new Date(),
         },
       });
 
@@ -298,6 +285,57 @@ export const createKejadianTakTerduga = async ({
 //   };
 // };
 
+const getWIBRange = (type, startDate, endDate) => {
+  const offset = 7 * 60 * 60 * 1000;
+
+  const now = new Date();
+  const nowWIB = new Date(now.getTime() + offset);
+
+  let start;
+  let end;
+
+  if (type === "today") {
+    start = new Date(nowWIB);
+    start.setHours(0, 0, 0, 0);
+
+    end = new Date(nowWIB);
+    end.setHours(23, 59, 59, 999);
+  }
+
+  if (type === "week") {
+    const day = nowWIB.getDay() || 7;
+
+    start = new Date(nowWIB);
+    start.setDate(nowWIB.getDate() - day + 1);
+    start.setHours(0, 0, 0, 0);
+
+    end = new Date(nowWIB);
+    end.setHours(23, 59, 59, 999);
+  }
+
+  if (type === "month") {
+    start = new Date(nowWIB.getFullYear(), nowWIB.getMonth(), 1);
+    start.setHours(0, 0, 0, 0);
+
+    end = new Date(nowWIB);
+    end.setHours(23, 59, 59, 999);
+  }
+
+  if (type === "custom") {
+    if (!startDate || !endDate) return undefined;
+
+    start = new Date(`${startDate}T00:00:00`);
+    end = new Date(`${endDate}T23:59:59.999`);
+  }
+
+  if (!start || !end) return undefined;
+
+  return {
+    gte: new Date(start.getTime() - offset),
+    lte: new Date(end.getTime() - offset),
+  };
+};
+
 export const getLaporanKeuangan = async (params) => {
   try {
     const {
@@ -338,51 +376,10 @@ export const getLaporanKeuangan = async (params) => {
        2️⃣ DATE FILTER BUILDER
     ========================== */
 
-    const now = new Date();
-    let dateFilter = undefined;
-
-    if (filterPeriod === "today") {
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-
-      const end = new Date();
-      end.setHours(23, 59, 59, 999);
-
-      dateFilter = { gte: start, lte: end };
-    }
-
-    if (filterPeriod === "week") {
-      const day = now.getDay() || 7;
-      const start = new Date(now);
-      start.setDate(now.getDate() - day + 1);
-      start.setHours(0, 0, 0, 0);
-
-      const end = new Date();
-      end.setHours(23, 59, 59, 999);
-
-      dateFilter = { gte: start, lte: end };
-    }
-
-    if (filterPeriod === "month") {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      start.setHours(0, 0, 0, 0);
-
-      const end = new Date();
-      end.setHours(23, 59, 59, 999);
-
-      dateFilter = { gte: start, lte: end };
-    }
-
-    if (filterPeriod === "custom") {
-      if (!startDate || !endDate) {
-        throw new Error("Custom period membutuhkan startDate dan endDate");
-      }
-
-      dateFilter = {
-        gte: new Date(`${startDate}T00:00:00.000Z`),
-        lte: new Date(`${endDate}T23:59:59.999Z`),
-      };
-    }
+    const dateFilter =
+      filterPeriod === "all"
+        ? undefined
+        : getWIBRange(filterPeriod, startDate, endDate);
 
     /* =========================
        3️⃣ WHERE BUILDER

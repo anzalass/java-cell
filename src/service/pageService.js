@@ -387,13 +387,21 @@ export const dashboardPageService2 = async (
   try {
     console.log(user);
 
+    const offset = 7 * 60 * 60 * 1000;
+
     const now = new Date();
-    const startOfToday = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
+    const nowWIB = new Date(now.getTime() + offset);
+
+    const startWIB = new Date(
+      nowWIB.getFullYear(),
+      nowWIB.getMonth(),
+      nowWIB.getDate()
     );
-    const endOfToday = new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000);
+
+    const endWIB = new Date(startWIB.getTime() + 24 * 60 * 60 * 1000);
+
+    const startOfToday = new Date(startWIB.getTime() - offset);
+    const endOfToday = new Date(endWIB.getTime() - offset);
 
     const todayFilter = {
       createdAt: {
@@ -403,7 +411,6 @@ export const dashboardPageService2 = async (
       idToko: user?.toko_id,
       deletedAt: null,
     };
-
     // === AGREGAT & COUNT (ringan, tidak perlu paginate) ===
     const [
       totalKeuntunganHariIni, //o
@@ -683,9 +690,8 @@ export const dashboardPageService2 = async (
             gte: startOfToday,
             lt: endOfToday,
           },
-          idToko: user?.toko_id,
+          idToko: user.toko_id,
         },
-        orderBy: { createdAt: "desc" },
       }),
       // Stok Aksesoris
       prisma.aksesoris.findMany({

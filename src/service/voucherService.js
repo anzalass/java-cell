@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
 import { createLog } from "./logService.js";
+import { toUTCFromWIBRange } from "../utils/wibMiddleware.js";
 
 const prisma = new PrismaClient();
 
@@ -47,74 +48,28 @@ export const getVouchers = async (
 
     // ✅ Filter tanggal
     // ✅ Filter CREATED RANGE
-    const createdFilter =
-      createdStart || createdEnd
-        ? {
-            createdAt: {
-              ...(createdStart && {
-                gte: new Date(new Date(createdStart).setHours(0, 0, 0, 0)),
-              }),
-              ...(createdEnd && {
-                lte: new Date(new Date(createdEnd).setHours(23, 59, 59, 999)),
-              }),
-            },
-          }
-        : {};
-
-    // ✅ Filter UPDATED RANGE
-    const updatedFilter =
-      updatedStart || updatedEnd
-        ? {
-            updatedAt: {
-              ...(updatedStart && {
-                gte: new Date(new Date(updatedStart).setHours(0, 0, 0, 0)),
-              }),
-              ...(updatedEnd && {
-                lte: new Date(new Date(updatedEnd).setHours(23, 59, 59, 999)),
-              }),
-            },
-          }
-        : {};
-
-    const brandFilter =
-      brand && brand !== "all"
-        ? {
-            brand: {
-              equals: brand,
-              mode: "insensitive",
-            },
-          }
-        : {};
-
-    const penempatanFilter = penempatan
-      ? {
-          penempatan: {
-            contains: penempatan,
-            mode: "insensitive",
-          },
-        }
-      : {};
-
-    // ✅ Filter pencarian
-    const searchFilter = search
-      ? {
-          OR: [
-            { nama: { contains: search, mode: "insensitive" } },
-            { brand: { contains: search, mode: "insensitive" } },
-          ],
-        }
-      : {};
+    const createdRange = toUTCFromWIBRange(createdStart, createdEnd);
+    const updatedRange = toUTCFromWIBRange(updatedStart, updatedEnd);
 
     const where = {
-      ...createdFilter,
-      ...updatedFilter,
-      ...brandFilter,
-      ...penempatanFilter,
-      ...(search ? searchFilter : {}),
+      ...(Object.keys(createdRange).length && { createdAt: createdRange }),
+      ...(Object.keys(updatedRange).length && { updatedAt: updatedRange }),
+      ...(brand &&
+        brand !== "all" && {
+          brand: { equals: brand, mode: "insensitive" },
+        }),
+      ...(penempatan && {
+        penempatan: { contains: penempatan, mode: "insensitive" },
+      }),
+      ...(search && {
+        OR: [
+          { nama: { contains: search, mode: "insensitive" } },
+          { brand: { contains: search, mode: "insensitive" } },
+        ],
+      }),
       idToko: user.toko_id,
       isActive: true,
     };
-
     // ✅ Validasi field sort (aman dari inject)
     const allowedSortFields = [
       "brand",

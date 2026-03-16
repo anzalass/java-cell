@@ -2,6 +2,7 @@
 import { PrismaClient } from "@prisma/client";
 import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
 import { createLog } from "./logService.js";
+import { toUTCFromWIBRange } from "../utils/wibMiddleware.js";
 
 const prisma = new PrismaClient();
 
@@ -260,11 +261,13 @@ export const getAllServiceHP = async ({
     where.status = status;
   }
 
-  // Filter tanggal
   if (startDate || endDate) {
-    where.tanggal = {};
-    if (startDate) where.tanggal.gte = new Date(startDate);
-    if (endDate) where.tanggal.lte = new Date(endDate);
+    const range = toUTCFromWIBRange(startDate, endDate);
+
+    where.createdAt = {};
+
+    if (range.gte) where.tanggal.gte = range.gte;
+    if (range.lte) where.tanggal.lte = range.lte;
   }
 
   const [data, total] = await prisma.$transaction([

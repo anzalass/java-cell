@@ -1,5 +1,6 @@
 // src/services/log.service.js
 import { PrismaClient } from "@prisma/client";
+import { toUTCFromWIBRange } from "../utils/wibMiddleware.js";
 
 const prisma = new PrismaClient();
 
@@ -93,10 +94,14 @@ export const getAllLogs = async ({
     /* =========================
        FILTER TANGGAL
     ========================== */
+    // FILTER TANGGAL (WIB → UTC)
     if (startDate || endDate) {
+      const range = toUTCFromWIBRange(startDate, endDate);
+
       where.createdAt = {};
-      if (startDate) where.createdAt.gte = new Date(startDate);
-      if (endDate) where.createdAt.lte = new Date(endDate);
+
+      if (range.gte) where.createdAt.gte = range.gte;
+      if (range.lte) where.createdAt.lte = range.lte;
     }
 
     /* =========================

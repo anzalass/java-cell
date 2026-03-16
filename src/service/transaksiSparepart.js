@@ -2,6 +2,7 @@
 import { PrismaClient } from "@prisma/client";
 import { prismaErrorHandler } from "../utils/errorHandlerPrisma.js";
 import { createLog } from "./logService.js";
+import { toUTCFromWIBRange } from "../utils/wibMiddleware.js";
 
 const prisma = new PrismaClient();
 
@@ -238,11 +239,12 @@ export const getAllTransaksiSparepart = async ({
 
   // 📅 Filter tanggal
   if (startDate || endDate) {
-    where.tanggal = {};
-    if (startDate) where.tanggal.gte = new Date(startDate);
-    if (endDate) where.tanggal.lte = new Date(endDate);
-  }
+    const range = toUTCFromWIBRange(startDate, endDate);
 
+    where.tanggal = {};
+    if (range.gte) where.tanggal.gte = range.gte;
+    if (range.lte) where.tanggal.lte = range.lte;
+  }
   // 📌 Filter status
   if (status) {
     where.status = status;
@@ -310,45 +312,56 @@ export const getAllTransaksiSparepart = async ({
 };
 
 const getDateRange = (period, startDate, endDate) => {
+  const offset = 7 * 60 * 60 * 1000;
+
   const now = new Date();
+  const nowWIB = new Date(now.getTime() + offset);
+
+  let start;
+  let end;
 
   if (period === "today") {
-    const start = new Date(now);
+    start = new Date(nowWIB);
     start.setHours(0, 0, 0, 0);
-    const end = new Date(now);
+
+    end = new Date(nowWIB);
     end.setHours(23, 59, 59, 999);
-    return { start, end };
   }
 
   if (period === "week") {
-    const start = new Date(now);
-    const day = now.getDay() || 7;
-    start.setDate(now.getDate() - day + 1);
+    const day = nowWIB.getDay() || 7;
+
+    start = new Date(nowWIB);
+    start.setDate(nowWIB.getDate() - day + 1);
     start.setHours(0, 0, 0, 0);
-    const end = new Date(now);
+
+    end = new Date(nowWIB);
     end.setHours(23, 59, 59, 999);
-    return { start, end };
   }
 
   if (period === "month") {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    start = new Date(nowWIB.getFullYear(), nowWIB.getMonth(), 1);
     start.setHours(0, 0, 0, 0);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    end = new Date(nowWIB);
     end.setHours(23, 59, 59, 999);
-    return { start, end };
   }
 
   if (period === "custom" && startDate && endDate) {
-    const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
-    return { start, end };
+    start = new Date(`${startDate}T00:00:00`);
+    end = new Date(`${endDate}T23:59:59.999`);
   }
 
-  return { start: new Date("1970-01-01"), end: now };
-};
+  if (!start || !end) {
+    start = new Date("1970-01-01");
+    end = nowWIB;
+  }
 
+  return {
+    start: new Date(start.getTime() - offset),
+    end: new Date(end.getTime() - offset),
+  };
+};
 export const getLaporanBarangKeluar = async ({
   page = 1,
   pageSize = 10,
