@@ -123,12 +123,11 @@ export const generateDailyKeuntungan = async (idToko) => {
 };
 export const startDailyKeuntunganCron = () => {
   cron.schedule(
-    "0 3 * * *", // 03:00 setiap hari
+    "59 23 * * *",
     async () => {
       try {
-        const tokos = await prisma.toko.findMany({
-          select: { id: true },
-        });
+        // Ambil semua toko
+        const tokos = await prisma.toko.findMany({ select: { id: true } });
 
         for (const toko of tokos) {
           await generateDailyKeuntungan(toko.id);
@@ -146,9 +145,8 @@ export const startDailyKeuntunganCron = () => {
     }
   );
 
-  console.log("⏰ Cron job keuntungan harian aktif (03:00 WIB)");
+  console.log("⏰ Cron job keuntungan harian aktif (WIB)");
 };
-
 /**
  * Ambil data keuntungan berdasarkan periode
  * @param {string} idToko - ID toko
