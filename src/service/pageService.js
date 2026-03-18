@@ -686,7 +686,7 @@ export const dashboardPageService2 = async (
       }),
       prisma.uangModal.findMany({
         where: {
-          createdAt: {
+          tanggal: {
             gte: startOfToday,
             lt: endOfToday,
           },

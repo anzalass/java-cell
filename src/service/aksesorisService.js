@@ -19,6 +19,8 @@ export const getAllAcc = async ({
   idToko,
 }) => {
   try {
+    console.log("penempatan", penempatan);
+
     const skip = (Number(page) - 1) * Number(pageSize);
     const take = Number(pageSize);
 
@@ -47,7 +49,7 @@ export const getAllAcc = async ({
     }
 
     if (penempatan) {
-      where.brand = {
+      where.penempatan = {
         contains: penempatan,
         mode: "insensitive",
       };
