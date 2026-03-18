@@ -318,7 +318,16 @@ export const getAllTransaksiGrosir = async ({
   }
   // Filter kodeDownline
   if (search) {
-    where.kodeDownline = { contains: search, mode: "insensitive" };
+    where.OR = [
+      {
+        downline: {
+          nama: { contains: search, mode: "insensitive" },
+        },
+      },
+      {
+        kodeDownline: { contains: search, mode: "insensitive" },
+      },
+    ];
   }
 
   // Filter tanggal

@@ -264,10 +264,10 @@ export const getAllServiceHP = async ({
   if (startDate || endDate) {
     const range = toUTCFromWIBRange(startDate, endDate);
 
-    where.createdAt = {};
-
-    if (range.gte) where.tanggal.gte = range.gte;
-    if (range.lte) where.tanggal.lte = range.lte;
+    where.tanggal = {
+      ...(range.gte && { gte: range.gte }),
+      ...(range.lte && { lte: range.lte }),
+    };
   }
 
   const [data, total] = await prisma.$transaction([
