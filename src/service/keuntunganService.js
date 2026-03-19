@@ -5,24 +5,26 @@ const prisma = new PrismaClient();
 import cron from "node-cron";
 
 export const getTodayWIBRange = () => {
-  const offset = 7 * 60 * 60 * 1000;
-
   const now = new Date();
-  const nowWIB = new Date(now.getTime() + offset);
 
-  const start = new Date(nowWIB);
-  start.setHours(0, 0, 0, 0);
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 
-  const end = new Date(nowWIB);
-  end.setHours(23, 59, 59, 999);
+  const [year, month, day] = formatter.format(now).split("-");
+
+  const start = new Date(`${year}-${month}-${day}T00:00:00+07:00`);
+  const end = new Date(`${year}-${month}-${day}T23:59:59.999+07:00`);
 
   return {
-    start: new Date(start.getTime() - offset),
-    end: new Date(end.getTime() - offset),
+    start,
+    end,
     tanggalWIB: start,
   };
 };
-
 export const toWIB = (date) => {
   if (!date) return null;
   const offset = 7 * 60 * 60 * 1000;
@@ -40,7 +42,7 @@ export const generateDailyKeuntungan = async (idToko) => {
           createdAt: { gte: start, lte: end },
           deletedAt: null,
         },
-        _sum: { keuntungan: true },
+        _sum: { nominal: true },
       }),
 
       prisma.transaksiVoucherHarian.aggregate({
@@ -75,6 +77,7 @@ export const generateDailyKeuntungan = async (idToko) => {
           idToko,
           createdAt: { gte: start, lte: end },
           deletedAt: null,
+          status: "Selesai",
         },
         _sum: { keuntungan: true },
       }),
@@ -84,13 +87,14 @@ export const generateDailyKeuntungan = async (idToko) => {
           idToko,
           createdAt: { gte: start, lte: end },
           deletedAt: null,
+          status: "Selesai",
         },
         _sum: { keuntungan: true },
       }),
     ]);
 
     const data = {
-      keuntunganTransaksi: trx._sum.keuntungan || 0,
+      keuntunganTransaksi: trx._sum.nominal || 0,
       keuntunganVoucherHarian: vd._sum.keuntungan || 0,
       keuntunganAcc: acc._sum.keuntungan || 0,
       keuntunganSparepart: sparepart._sum.keuntungan || 0,

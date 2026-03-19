@@ -38,11 +38,15 @@ export const getMembersWithFilterHandler = async (req, res) => {
       sortOrder,
       minTotalTransaksi,
       maxTotalTransaksi,
+      startDate,
+      endDate,
     } = req.query;
 
     const result = await getMembersWithFilter({
       page,
       pageSize,
+      startDate,
+      endDate,
       search,
       sortBy,
       sortOrder,

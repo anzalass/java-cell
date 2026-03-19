@@ -334,7 +334,7 @@ export const getAllTransaksiGrosir = async ({
   if (startDate || endDate) {
     const range = toUTCFromWIBRange(startDate, endDate);
 
-    where.tanggal = {};
+    where.createdAt = {};
     if (range.gte) where.createdAt.gte = range.gte;
     if (range.lte) where.createdAt.lte = range.lte;
   }

@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { createLog } from "./logService.js";
+import { toUTCFromWIBRange } from "../utils/wibMiddleware.js";
 const prisma = new PrismaClient();
 // ─── 1. GET ALL MEMBERS (tanpa filter) ───────────────────────────────
 export const getAllMembers = async (user) => {
@@ -31,6 +32,8 @@ export const getMembersWithFilter = async ({
   search = "",
   sortBy = "createdAt",
   sortOrder = "desc",
+  startDate,
+  endDate,
   minTotalTransaksi,
   maxTotalTransaksi,
   idToko,
@@ -49,6 +52,14 @@ export const getMembersWithFilter = async ({
   // Bangun kondisi where
   const where = {};
   where.idToko = idToko;
+
+  if (startDate || endDate) {
+    const range = toUTCFromWIBRange(startDate, endDate);
+
+    where.createdAt = {};
+    if (range.gte) where.createdAt.gte = range.gte;
+    if (range.lte) where.createdAt.lte = range.lte;
+  }
 
   // Filter pencarian (nama atau noTelp)
   if (search) {
@@ -76,6 +87,7 @@ export const getMembersWithFilter = async ({
         noTelp: true,
         createdAt: true,
         updatedAt: true,
+        kodeMember: true,
       },
     });
 

@@ -387,21 +387,20 @@ export const dashboardPageService2 = async (
   try {
     console.log(user);
 
-    const offset = 7 * 60 * 60 * 1000;
-
     const now = new Date();
-    const nowWIB = new Date(now.getTime() + offset);
 
-    const startWIB = new Date(
-      nowWIB.getFullYear(),
-      nowWIB.getMonth(),
-      nowWIB.getDate()
-    );
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Jakarta",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
 
-    const endWIB = new Date(startWIB.getTime() + 24 * 60 * 60 * 1000);
+    const [year, month, day] = formatter.format(now).split("-");
 
-    const startOfToday = new Date(startWIB.getTime() - offset);
-    const endOfToday = new Date(endWIB.getTime() - offset);
+    const startOfToday = new Date(`${year}-${month}-${day}T00:00:00+07:00`);
+    const endOfToday = new Date(`${year}-${month}-${day}T00:00:00+07:00`);
+    endOfToday.setDate(endOfToday.getDate() + 1); // besok jam 00:00
 
     const todayFilter = {
       createdAt: {

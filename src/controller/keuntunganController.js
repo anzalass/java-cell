@@ -46,7 +46,7 @@ export const getKeuntunganController = async (req, res) => {
   try {
     const { filter, startDate, endDate } = req.query;
 
-    const idToko = req.user.toki_id;
+    const idToko = req.user.toko_id;
 
     const result = await getKeuntunganService({
       idToko,

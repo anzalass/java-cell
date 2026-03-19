@@ -14,9 +14,9 @@ export const getJualanHarianToday = async (
 
   const where = {
     idToko: user.toko_id,
-    tanggal: {
+    createdAt: {
       gte: start,
-      lte: end,
+      lt: end,
     },
   };
 
